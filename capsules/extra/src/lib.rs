@@ -34,6 +34,7 @@ pub mod dac;
 pub mod date_time;
 pub mod debug_process_restart;
 pub mod eui64;
+pub mod ePaper_V2;
 pub mod fm25cl;
 pub mod ft6x06;
 pub mod fxos8700cq;
