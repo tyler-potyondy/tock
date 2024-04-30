@@ -666,10 +666,13 @@ pub unsafe fn start() -> (
     // to the nonvolatile storage capsule to be read and written to. Note
     // this region does not possess protection and is readable and writeable
     // by all applications.
-    let rw_app_flash_len = 0x8000;
+    let rw_app_flash_len = 0x2000;
     let rw_app_flash_start_addr = &_etext as *const u8 as usize - rw_app_flash_len;
     let kernel_start_addr = &_sstorage as *const u8 as usize;
     let kernel_len = &_estorage as *const u8 as usize - &_sstorage as *const u8 as usize;
+
+    debug!("len {:2x?}", rw_app_flash_len);
+    debug!("app flash len {:2x?}", rw_app_flash_start_addr);
 
     let nonvolatile_storage = components::nonvolatile_storage::NonvolatileStorageComponent::new(
         board_kernel,

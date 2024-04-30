@@ -215,6 +215,7 @@ impl<'a> NonvolatileStorage<'a> {
         length: usize,
         processid: Option<ProcessId>,
     ) -> Result<(), ErrorCode> {
+       kernel::debug!("bounds check\n");
         // Do bounds check.
         match command {
             NonvolatileCommand::UserspaceRead | NonvolatileCommand::UserspaceWrite => {
@@ -240,6 +241,7 @@ impl<'a> NonvolatileStorage<'a> {
             }
         }
 
+        kernel::debug!("perform op");
         // Do very different actions if this is a call from userspace
         // or from the kernel.
         match command {
@@ -308,6 +310,7 @@ impl<'a> NonvolatileStorage<'a> {
                                     // request.
                                     Err(ErrorCode::NOMEM)
                                 } else {
+                                    kernel::debug!("pending");
                                     // We can store this, so lets do it.
                                     app.pending_command = true;
                                     app.command = command;
@@ -562,6 +565,7 @@ impl SyscallDriver for NonvolatileStorage<'_> {
             }
 
             2 => {
+                kernel::debug!("READ COMMAND ISSUED");
                 // Issue a read command
                 let res = self.enqueue_command(
                     NonvolatileCommand::UserspaceRead,
@@ -569,7 +573,8 @@ impl SyscallDriver for NonvolatileStorage<'_> {
                     length,
                     Some(processid),
                 );
-
+                
+                kernel::debug!("RES: {:?}",res);
                 match res {
                     Ok(()) => CommandReturn::success(),
                     Err(e) => CommandReturn::failure(e),
@@ -577,6 +582,7 @@ impl SyscallDriver for NonvolatileStorage<'_> {
             }
 
             3 => {
+                kernel::debug!("WRITE COMMAND ISSUED");
                 // Issue a write command
                 let res = self.enqueue_command(
                     NonvolatileCommand::UserspaceWrite,
@@ -584,6 +590,8 @@ impl SyscallDriver for NonvolatileStorage<'_> {
                     length,
                     Some(processid),
                 );
+
+                kernel::debug!("RES: {:?}", res);
 
                 match res {
                     Ok(()) => CommandReturn::success(),
