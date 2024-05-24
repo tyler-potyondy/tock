@@ -197,6 +197,9 @@ type Ieee802154Driver = components::ieee802154::Ieee802154ComponentType<
 // EUI64
 type Eui64Driver = components::eui64::Eui64ComponentType;
 
+// Screen
+type ScreenDriver = components::screen::ScreenComponentType;
+
 /// Supported drivers by the platform
 pub struct Platform {
     ble_radio: &'static capsules_extra::ble_advertising_driver::BLE<
@@ -249,6 +252,7 @@ pub struct Platform {
     kv_driver: &'static KVDriver,
     scheduler: &'static RoundRobinSched<'static>,
     systick: cortexm4::systick::SysTick,
+    screen: &'static ScreenDriver,
 }
 
 impl SyscallDriverLookup for Platform {
@@ -275,6 +279,7 @@ impl SyscallDriverLookup for Platform {
             capsules_core::spi_controller::DRIVER_NUM => f(Some(self.spi_controller)),
             capsules_extra::net::thread::driver::DRIVER_NUM => f(Some(self.thread_driver)),
             capsules_extra::kv_driver::DRIVER_NUM => f(Some(self.kv_driver)),
+            capsules_extra::screen::DRIVER_NUM => f(Some(self.screen)),
             _ => f(None),
         }
     }
@@ -409,10 +414,10 @@ pub unsafe fn start() -> (
         capsules_core::gpio::DRIVER_NUM,
         components::gpio_component_helper!(
             nrf52840::gpio::GPIOPin,
-            0 => &nrf52840_peripherals.gpio_port[Pin::P1_01],
-            1 => &nrf52840_peripherals.gpio_port[Pin::P1_02],
-            2 => &nrf52840_peripherals.gpio_port[Pin::P1_03],
-            3 => &nrf52840_peripherals.gpio_port[Pin::P1_04],
+            // 0 => &nrf52840_peripherals.gpio_port[Pin::P1_01],
+            // 1 => &nrf52840_peripherals.gpio_port[Pin::P1_02],
+            // 2 => &nrf52840_peripherals.gpio_port[Pin::P1_03],
+            // 3 => &nrf52840_peripherals.gpio_port[Pin::P1_04],
             4 => &nrf52840_peripherals.gpio_port[Pin::P1_05],
             5 => &nrf52840_peripherals.gpio_port[Pin::P1_06],
             6 => &nrf52840_peripherals.gpio_port[Pin::P1_07],
@@ -698,6 +703,17 @@ pub unsafe fn start() -> (
     //--------------------------------------------------------------------------
     // SPI
     //--------------------------------------------------------------------------
+    base_peripherals.spim0.configure(
+        nrf52840::pinmux::Pinmux::new(SPI_MOSI as u32),
+        nrf52840::pinmux::Pinmux::new(SPI_MISO as u32),
+        nrf52840::pinmux::Pinmux::new(SPI_CLK as u32),
+    );
+
+    base_peripherals.spim2.configure(
+        nrf52840::pinmux::Pinmux::new(Pin::P1_01 as u32),
+        nrf52840::pinmux::Pinmux::new(Pin::P1_02 as u32),
+        nrf52840::pinmux::Pinmux::new(Pin::P1_03 as u32),
+    );
 
     let mux_spi = components::spi::SpiMuxComponent::new(&base_peripherals.spim0)
         .finalize(components::spi_mux_component_static!(nrf52840::spi::SPIM));
@@ -713,11 +729,26 @@ pub unsafe fn start() -> (
         nrf52840::spi::SPIM
     ));
 
-    base_peripherals.spim0.configure(
-        nrf52840::pinmux::Pinmux::new(SPI_MOSI as u32),
-        nrf52840::pinmux::Pinmux::new(SPI_MISO as u32),
-        nrf52840::pinmux::Pinmux::new(SPI_CLK as u32),
-    );
+    //-------------------------------------------------------------------------
+    // Screen
+    //-------------------------------------------------------------------------
+
+    let epaper_v2_spi = components::spi::SpiMuxComponent::new(&base_peripherals.spim2)
+        .finalize(components::spi_mux_component_static!(nrf52840::spi::SPIM));
+
+    let epaper_v2 =
+        components::epaper_v2::EPaperV2Component::new(epaper_v2_spi, &gpio_port[Pin::P1_04], true)
+            .finalize(components::epaper_v2_component_static!(nrf52840::spi::SPIM));
+
+    let screen = components::screen::ScreenComponent::new(
+        board_kernel,
+        capsules_extra::screen::DRIVER_NUM,
+        epaper_v2,
+        Some(epaper_v2),
+    )
+    .finalize(components::screen_component_static!(1032));
+
+    epaper_v2.init_screen();
 
     //--------------------------------------------------------------------------
     // ONBOARD EXTERNAL FLASH
@@ -921,6 +952,7 @@ pub unsafe fn start() -> (
         kv_driver,
         scheduler,
         systick: cortexm4::systick::SysTick::new_with_calibration(64000000),
+        screen,
     };
 
     let _ = platform.pconsole.start();
