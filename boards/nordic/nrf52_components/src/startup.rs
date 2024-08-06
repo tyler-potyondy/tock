@@ -14,6 +14,8 @@ use kernel::component::Component;
 use nrf52::gpio::Pin;
 use nrf52::uicr::Regulator0Output;
 
+use kernel::utilities::StaticRef;
+
 pub struct NrfStartupComponent<'a> {
     nfc_as_gpios: bool,
     button_rst_pin: Pin,
@@ -189,6 +191,7 @@ pub struct UartChannelComponent {
     uart_channel: UartChannel<'static>,
     mux_alarm: &'static MuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     uarte0: &'static nrf52::uart::Uarte<'static>,
+    uart_power: nrf52::uart::PowerOff<StaticRef<nrf52::uart::UarteRegisters>>,
 }
 
 impl UartChannelComponent {
@@ -196,11 +199,13 @@ impl UartChannelComponent {
         uart_channel: UartChannel<'static>,
         mux_alarm: &'static MuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
         uarte0: &'static nrf52::uart::Uarte<'static>,
+        uart_power: nrf52::uart::PowerOff<StaticRef<nrf52::uart::UarteRegisters>>,
     ) -> Self {
         Self {
             uart_channel,
             mux_alarm,
             uarte0,
+            uart_power,
         }
     }
 }
@@ -219,6 +224,7 @@ impl Component for UartChannelComponent {
             UartChannel::Pins(uart_pins) => {
                 unsafe {
                     self.uarte0.initialize(
+                        self.uart_power,
                         nrf52::pinmux::Pinmux::new(uart_pins.txd as u32),
                         nrf52::pinmux::Pinmux::new(uart_pins.rxd as u32),
                         uart_pins.cts.map(|x| nrf52::pinmux::Pinmux::new(x as u32)),

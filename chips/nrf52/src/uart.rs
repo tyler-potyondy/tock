@@ -20,12 +20,58 @@ use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 use nrf5x::pinmux;
 
+use core::marker::PhantomData;
+
 const UARTE_MAX_BUFFER_SIZE: u32 = 0xff;
 
 static mut BYTE: u8 = 0;
 
 pub const UARTE0_BASE: StaticRef<UarteRegisters> =
     unsafe { StaticRef::new(0x40002000 as *const UarteRegisters) };
+
+pub struct PowerOff<T: PowerControl> {
+    _peripheral: PhantomData<T>,
+}
+
+impl<T: PowerControl> Drop for PowerOff<T> {
+    fn drop(&mut self) {
+        // Disable the peripheral
+        T::power_off();
+    }
+}
+
+trait PowerControl {
+    fn power_off();
+}
+
+struct Peripheral<T> {
+    registers: T,
+}
+
+impl PowerControl for StaticRef<UarteRegisters> {
+    fn power_off() {
+        // Disable the peripheral
+        UARTE0_BASE.enable.write(Uart::ENABLE::OFF);
+    }
+}
+
+impl<T: PowerControl> Peripheral<T> {
+    const fn new(registers: T) -> (Peripheral<T>, PowerOff<T>) {
+        (
+            Peripheral {
+                registers: registers,
+            },
+            PowerOff {
+                _peripheral: PhantomData,
+            },
+        )
+    }
+}
+
+pub fn take(_p: PowerOff<StaticRef<UarteRegisters>>) {
+
+    // Do nothing
+}
 
 #[repr(C)]
 pub struct UarteRegisters {
@@ -163,7 +209,7 @@ register_bitfields! [u32,
 // It should never be instanced outside this module but because a static mutable reference to it
 // is exported outside this module it must be `pub`
 pub struct Uarte<'a> {
-    registers: StaticRef<UarteRegisters>,
+    peripheral: Peripheral<StaticRef<UarteRegisters>>,
     tx_client: OptionalCell<&'a dyn uart::TransmitClient>,
     tx_buffer: kernel::utilities::cells::TakeCell<'static, [u8]>,
     tx_len: Cell<usize>,
@@ -183,49 +229,68 @@ pub struct UARTParams {
 impl<'a> Uarte<'a> {
     /// Constructor
     // This should only be constructed once
-    pub const fn new(regs: StaticRef<UarteRegisters>) -> Uarte<'a> {
-        Uarte {
-            registers: regs,
-            tx_client: OptionalCell::empty(),
-            tx_buffer: kernel::utilities::cells::TakeCell::empty(),
-            tx_len: Cell::new(0),
-            tx_remaining_bytes: Cell::new(0),
-            rx_client: OptionalCell::empty(),
-            rx_buffer: kernel::utilities::cells::TakeCell::empty(),
-            rx_remaining_bytes: Cell::new(0),
-            rx_abort_in_progress: Cell::new(false),
-            offset: Cell::new(0),
-        }
+    pub fn new(
+        regs: StaticRef<UarteRegisters>,
+    ) -> (Uarte<'a>, PowerOff<StaticRef<UarteRegisters>>) {
+        let (peripheral, power) = Peripheral::new(regs);
+        (
+            Uarte {
+                peripheral: peripheral,
+                tx_client: OptionalCell::empty(),
+                tx_buffer: kernel::utilities::cells::TakeCell::empty(),
+                tx_len: Cell::new(0),
+                tx_remaining_bytes: Cell::new(0),
+                rx_client: OptionalCell::empty(),
+                rx_buffer: kernel::utilities::cells::TakeCell::empty(),
+                rx_remaining_bytes: Cell::new(0),
+                rx_abort_in_progress: Cell::new(false),
+                offset: Cell::new(0),
+            },
+            power,
+        )
     }
 
     /// Configure which pins the UART should use for txd, rxd, cts and rts
     pub fn initialize(
         &self,
+        power: PowerOff<StaticRef<UarteRegisters>>,
         txd: pinmux::Pinmux,
         rxd: pinmux::Pinmux,
         cts: Option<pinmux::Pinmux>,
         rts: Option<pinmux::Pinmux>,
     ) {
-        self.registers.pseltxd.write(Psel::PIN.val(txd.into()));
-        self.registers.pselrxd.write(Psel::PIN.val(rxd.into()));
+        self.peripheral
+            .registers
+            .pseltxd
+            .write(Psel::PIN.val(txd.into()));
+        self.peripheral
+            .registers
+            .pselrxd
+            .write(Psel::PIN.val(rxd.into()));
         cts.map_or_else(
             || {
                 // If no CTS pin is provided, then we need to mark it as
                 // disconnected in the register.
-                self.registers.pselcts.write(Psel::CONNECT::SET);
+                self.peripheral.registers.pselcts.write(Psel::CONNECT::SET);
             },
             |c| {
-                self.registers.pselcts.write(Psel::PIN.val(c.into()));
+                self.peripheral
+                    .registers
+                    .pselcts
+                    .write(Psel::PIN.val(c.into()));
             },
         );
         rts.map_or_else(
             || {
                 // If no RTS pin is provided, then we need to mark it as
                 // disconnected in the register.
-                self.registers.pselrts.write(Psel::CONNECT::SET);
+                self.peripheral.registers.pselrts.write(Psel::CONNECT::SET);
             },
             |r| {
-                self.registers.pselrts.write(Psel::PIN.val(r.into()));
+                self.peripheral
+                    .registers
+                    .pselrts
+                    .write(Psel::PIN.val(r.into()));
             },
         );
 
@@ -234,57 +299,72 @@ impl<'a> Uarte<'a> {
         // as we handle it, so this is not necessary. However, a bootloader (or
         // some other startup code) may have setup TX interrupts, and there may
         // be one pending. We clear it to be safe.
-        self.registers.event_endtx.write(Event::READY::CLEAR);
+        self.peripheral
+            .registers
+            .event_endtx
+            .write(Event::READY::CLEAR);
 
         self.enable_uart();
     }
 
     fn set_baud_rate(&self, baud_rate: u32) {
         match baud_rate {
-            1200 => self.registers.baudrate.set(0x0004F000),
-            2400 => self.registers.baudrate.set(0x0009D000),
-            4800 => self.registers.baudrate.set(0x0013B000),
-            9600 => self.registers.baudrate.set(0x00275000),
-            14400 => self.registers.baudrate.set(0x003AF000),
-            19200 => self.registers.baudrate.set(0x004EA000),
-            28800 => self.registers.baudrate.set(0x0075C000),
-            38400 => self.registers.baudrate.set(0x009D0000),
-            57600 => self.registers.baudrate.set(0x00EB0000),
-            76800 => self.registers.baudrate.set(0x013A9000),
-            115200 => self.registers.baudrate.set(0x01D60000),
-            230400 => self.registers.baudrate.set(0x03B00000),
-            250000 => self.registers.baudrate.set(0x04000000),
-            460800 => self.registers.baudrate.set(0x07400000),
-            921600 => self.registers.baudrate.set(0x0F000000),
-            1000000 => self.registers.baudrate.set(0x10000000),
-            _ => self.registers.baudrate.set(0x01D60000), //setting default to 115200
+            1200 => self.peripheral.registers.baudrate.set(0x0004F000),
+            2400 => self.peripheral.registers.baudrate.set(0x0009D000),
+            4800 => self.peripheral.registers.baudrate.set(0x0013B000),
+            9600 => self.peripheral.registers.baudrate.set(0x00275000),
+            14400 => self.peripheral.registers.baudrate.set(0x003AF000),
+            19200 => self.peripheral.registers.baudrate.set(0x004EA000),
+            28800 => self.peripheral.registers.baudrate.set(0x0075C000),
+            38400 => self.peripheral.registers.baudrate.set(0x009D0000),
+            57600 => self.peripheral.registers.baudrate.set(0x00EB0000),
+            76800 => self.peripheral.registers.baudrate.set(0x013A9000),
+            115200 => self.peripheral.registers.baudrate.set(0x01D60000),
+            230400 => self.peripheral.registers.baudrate.set(0x03B00000),
+            250000 => self.peripheral.registers.baudrate.set(0x04000000),
+            460800 => self.peripheral.registers.baudrate.set(0x07400000),
+            921600 => self.peripheral.registers.baudrate.set(0x0F000000),
+            1000000 => self.peripheral.registers.baudrate.set(0x10000000),
+            _ => self.peripheral.registers.baudrate.set(0x01D60000), //setting default to 115200
         }
     }
 
     // Enable UART peripheral, this need to disabled for low power applications
     fn enable_uart(&self) {
-        self.registers.enable.write(Uart::ENABLE::ON);
+        self.peripheral.registers.enable.write(Uart::ENABLE::ON);
     }
 
     #[allow(dead_code)]
     fn disable_uart(&self) {
-        self.registers.enable.write(Uart::ENABLE::OFF);
+        self.peripheral.registers.enable.write(Uart::ENABLE::OFF);
     }
 
     fn enable_rx_interrupts(&self) {
-        self.registers.intenset.write(Interrupt::ENDRX::SET);
+        self.peripheral
+            .registers
+            .intenset
+            .write(Interrupt::ENDRX::SET);
     }
 
     fn enable_tx_interrupts(&self) {
-        self.registers.intenset.write(Interrupt::ENDTX::SET);
+        self.peripheral
+            .registers
+            .intenset
+            .write(Interrupt::ENDTX::SET);
     }
 
     fn disable_rx_interrupts(&self) {
-        self.registers.intenclr.write(Interrupt::ENDRX::SET);
+        self.peripheral
+            .registers
+            .intenclr
+            .write(Interrupt::ENDRX::SET);
     }
 
     fn disable_tx_interrupts(&self) {
-        self.registers.intenclr.write(Interrupt::ENDTX::SET);
+        self.peripheral
+            .registers
+            .intenclr
+            .write(Interrupt::ENDTX::SET);
     }
 
     /// UART interrupt handler that listens for both tx_end and rx_end events
@@ -292,8 +372,11 @@ impl<'a> Uarte<'a> {
     pub fn handle_interrupt(&self) {
         if self.tx_ready() {
             self.disable_tx_interrupts();
-            self.registers.event_endtx.write(Event::READY::CLEAR);
-            let tx_bytes = self.registers.txd_amount.get() as usize;
+            self.peripheral
+                .registers
+                .event_endtx
+                .write(Event::READY::CLEAR);
+            let tx_bytes = self.peripheral.registers.txd_amount.get() as usize;
 
             let rem = match self.tx_remaining_bytes.get().checked_sub(tx_bytes) {
                 None => return,
@@ -313,10 +396,14 @@ impl<'a> Uarte<'a> {
                 self.offset.set(self.offset.get() + tx_bytes);
                 self.tx_remaining_bytes.set(rem);
                 self.set_tx_dma_pointer_to_buffer();
-                self.registers
+                self.peripheral
+                    .registers
                     .txd_maxcnt
                     .write(Counter::COUNTER.val(min(rem as u32, UARTE_MAX_BUFFER_SIZE)));
-                self.registers.task_starttx.write(Task::ENABLE::SET);
+                self.peripheral
+                    .registers
+                    .task_starttx
+                    .write(Task::ENABLE::SET);
                 self.enable_tx_interrupts();
             }
         }
@@ -325,10 +412,13 @@ impl<'a> Uarte<'a> {
             self.disable_rx_interrupts();
 
             // Clear the ENDRX event
-            self.registers.event_endrx.write(Event::READY::CLEAR);
+            self.peripheral
+                .registers
+                .event_endrx
+                .write(Event::READY::CLEAR);
 
             // Get the number of bytes in the buffer that was received this time
-            let rx_bytes = self.registers.rxd_amount.get() as usize;
+            let rx_bytes = self.peripheral.registers.rxd_amount.get() as usize;
 
             // Check if this ENDRX is due to an abort. If so, we want to
             // do the receive callback immediately.
@@ -371,13 +461,17 @@ impl<'a> Uarte<'a> {
                     // Setup how much we can read. We already made sure that
                     // this will fit in the buffer.
                     let to_read = core::cmp::min(rem, 255);
-                    self.registers
+                    self.peripheral
+                        .registers
                         .rxd_maxcnt
                         .write(Counter::COUNTER.val(to_read as u32));
 
                     // Actually do the receive.
                     self.set_rx_dma_pointer_to_buffer();
-                    self.registers.task_startrx.write(Task::ENABLE::SET);
+                    self.peripheral
+                        .registers
+                        .task_startrx
+                        .write(Task::ENABLE::SET);
                     self.enable_rx_interrupts();
                 }
             }
@@ -388,27 +482,40 @@ impl<'a> Uarte<'a> {
     /// This is used by the panic handler
     pub unsafe fn send_byte(&self, byte: u8) {
         self.tx_remaining_bytes.set(1);
-        self.registers.event_endtx.write(Event::READY::CLEAR);
+        self.peripheral
+            .registers
+            .event_endtx
+            .write(Event::READY::CLEAR);
         // precaution: copy value into variable with static lifetime
         BYTE = byte;
-        self.registers.txd_ptr.set(core::ptr::addr_of!(BYTE) as u32);
-        self.registers.txd_maxcnt.write(Counter::COUNTER.val(1));
-        self.registers.task_starttx.write(Task::ENABLE::SET);
+        self.peripheral
+            .registers
+            .txd_ptr
+            .set(core::ptr::addr_of!(BYTE) as u32);
+        self.peripheral
+            .registers
+            .txd_maxcnt
+            .write(Counter::COUNTER.val(1));
+        self.peripheral
+            .registers
+            .task_starttx
+            .write(Task::ENABLE::SET);
     }
 
     /// Check if the UART transmission is done
     pub fn tx_ready(&self) -> bool {
-        self.registers.event_endtx.is_set(Event::READY)
+        self.peripheral.registers.event_endtx.is_set(Event::READY)
     }
 
     /// Check if either the rx_buffer is full or the UART has timed out
     pub fn rx_ready(&self) -> bool {
-        self.registers.event_endrx.is_set(Event::READY)
+        self.peripheral.registers.event_endrx.is_set(Event::READY)
     }
 
     fn set_tx_dma_pointer_to_buffer(&self) {
         self.tx_buffer.map(|tx_buffer| {
-            self.registers
+            self.peripheral
+                .registers
                 .txd_ptr
                 .set(tx_buffer[self.offset.get()..].as_ptr() as u32);
         });
@@ -416,7 +523,8 @@ impl<'a> Uarte<'a> {
 
     fn set_rx_dma_pointer_to_buffer(&self) {
         self.rx_buffer.map(|rx_buffer| {
-            self.registers
+            self.peripheral
+                .registers
                 .rxd_ptr
                 .set(rx_buffer[self.offset.get()..].as_ptr() as u32);
         });
@@ -430,10 +538,14 @@ impl<'a> Uarte<'a> {
         self.tx_buffer.replace(buf);
         self.set_tx_dma_pointer_to_buffer();
 
-        self.registers
+        self.peripheral
+            .registers
             .txd_maxcnt
             .write(Counter::COUNTER.val(min(tx_len as u32, UARTE_MAX_BUFFER_SIZE)));
-        self.registers.task_starttx.write(Task::ENABLE::SET);
+        self.peripheral
+            .registers
+            .task_starttx
+            .write(Task::ENABLE::SET);
 
         self.enable_tx_interrupts();
     }
@@ -511,11 +623,18 @@ impl<'a> uart::Receive<'a> for Uarte<'a> {
 
         let truncated_uart_max_length = core::cmp::min(truncated_length, 255);
 
-        self.registers
+        self.peripheral
+            .registers
             .rxd_maxcnt
             .write(Counter::COUNTER.val(truncated_uart_max_length as u32));
-        self.registers.task_stoprx.write(Task::ENABLE::SET);
-        self.registers.task_startrx.write(Task::ENABLE::SET);
+        self.peripheral
+            .registers
+            .task_stoprx
+            .write(Task::ENABLE::SET);
+        self.peripheral
+            .registers
+            .task_startrx
+            .write(Task::ENABLE::SET);
 
         self.enable_rx_interrupts();
         Ok(())
@@ -531,7 +650,10 @@ impl<'a> uart::Receive<'a> for Uarte<'a> {
             Ok(())
         } else {
             self.rx_abort_in_progress.set(true);
-            self.registers.task_stoprx.write(Task::ENABLE::SET);
+            self.peripheral
+                .registers
+                .task_stoprx
+                .write(Task::ENABLE::SET);
             Err(ErrorCode::BUSY)
         }
     }
