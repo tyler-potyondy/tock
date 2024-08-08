@@ -75,6 +75,7 @@ mod local_register;
 pub use local_register::LocalRegisterCopy;
 
 use core::fmt::Debug;
+use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
 
 /// Trait representing the base type of registers.
@@ -134,3 +135,33 @@ pub trait RegisterLongName {}
 // Useful implementation for when no RegisterLongName is required
 // (e.g. no fields need to be accessed, just the raw register values)
 impl RegisterLongName for () {}
+
+pub trait PowerType: Sized {}
+
+pub struct PowerOff<T: PowerControl<T>> {
+    _peripheral: PhantomData<T>,
+}
+
+impl<T: PowerControl<T>> PowerType for PowerOff<T> {}
+pub struct PowerOn<T: PowerControl<T>> {
+    _peripheral: PhantomData<T>,
+}
+
+impl<T: PowerControl<T>> Drop for PowerOff<T> {
+    fn drop(&mut self) {
+        // Disable the peripheral
+        T::power_off();
+    }
+}
+
+pub trait PowerControl<T: PowerControl<T>> {
+    fn power_off();
+    fn create(base_addr: u32) -> (*const T, PowerOff<T>) {
+        (
+            base_addr as *const T,
+            PowerOff {
+                _peripheral: PhantomData,
+            },
+        )
+    }
+}

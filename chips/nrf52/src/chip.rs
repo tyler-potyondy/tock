@@ -6,8 +6,7 @@ use core::fmt::Write;
 use cortexm4::{nvic, CortexM4, CortexMVariant};
 use kernel::platform::chip::InterruptService;
 
-use crate::uart::UarteRegisters;
-use kernel::utilities::StaticRef;
+use crate::uart::UART0_BASE_ADDR;
 
 pub struct NRF52<'a, I: InterruptService + 'a> {
     mpu: cortexm4::mpu::MPU,
@@ -42,7 +41,6 @@ pub struct Nrf52DefaultPeripherals<'a> {
     pub timer1: crate::timer::TimerAlarm<'a>,
     pub timer2: crate::timer::Timer,
     pub uarte0: crate::uart::Uarte<'a>,
-    pub uart_power: crate::uart::PowerOff<StaticRef<UarteRegisters>>,
     pub spim0: crate::spi::SPIM<'a>,
     pub twi1: crate::i2c::TWI<'a>,
     pub spim2: crate::spi::SPIM<'a>,
@@ -54,7 +52,6 @@ pub struct Nrf52DefaultPeripherals<'a> {
 
 impl<'a> Nrf52DefaultPeripherals<'a> {
     pub fn new() -> Self {
-        let (uart_peripheral, uart_power) = crate::uart::Uarte::new(crate::uart::UARTE0_BASE);
         Self {
             acomp: crate::acomp::Comparator::new(),
             ecb: crate::aes::AesECB::new(),
@@ -66,8 +63,7 @@ impl<'a> Nrf52DefaultPeripherals<'a> {
             timer0: crate::timer::TimerAlarm::new(0),
             timer1: crate::timer::TimerAlarm::new(1),
             timer2: crate::timer::Timer::new(2),
-            uarte0: uart_peripheral,
-            uart_power: uart_power,
+            uarte0: crate::uart::Uarte::new(UART0_BASE_ADDR),
             spim0: crate::spi::SPIM::new(0),
             twi1: crate::i2c::TWI::new_twi1(),
             spim2: crate::spi::SPIM::new(2),
