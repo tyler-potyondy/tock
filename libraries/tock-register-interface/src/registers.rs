@@ -26,7 +26,7 @@ use core::mem::transmute;
 
 use crate::fields::FieldValue;
 use crate::interfaces::{Readable, Writeable};
-use crate::{PowerControl, PowerOff, PowerOn, RegisterLongName, UIntLike};
+use crate::{PersPower, PowerControl, PowerOff, PowerOn, RegisterLongName, UIntLike};
 
 /// Read/Write registers.
 ///
@@ -141,6 +141,23 @@ impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> PrePowerConfig<T, P, 
             ::core::ptr::write_volatile(self.value.get(), field.value);
         }
         power
+    }
+}
+
+#[allow(dead_code)]
+#[repr(transparent)]
+pub struct PersistentPower<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+    value: UnsafeCell<T>,
+    associated_register: PhantomData<R>,
+    associated_power: PhantomData<P>,
+}
+
+impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> PersistentPower<T, P, R> {
+    pub fn write(&self, field: FieldValue<T, R>, power: PowerOn<P>) -> PersPower<P> {
+        unsafe {
+            ::core::ptr::write_volatile(self.value.get(), field.value);
+            transmute::<PowerOn<P>, PersPower<P>>(power)
+        }
     }
 }
 

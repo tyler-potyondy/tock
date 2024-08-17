@@ -24,11 +24,11 @@ pub mod registers {
     pub use tock_registers::interfaces;
     pub use tock_registers::registers::InMemoryRegister;
     pub use tock_registers::registers::{
-        Aliased, PowerWrite, PrePowerConfig, ReadOnly, ReadWrite, WriteOnly,
+        Aliased, PersistentPower, PowerWrite, PrePowerConfig, ReadOnly, ReadWrite, WriteOnly,
     };
     pub use tock_registers::{register_bitfields, register_structs};
     pub use tock_registers::{LocalRegisterCopy, RegisterLongName};
-    pub use tock_registers::{PowerControl, PowerOff, PowerOn, PowerType};
+    pub use tock_registers::{PersPower, PowerControl, PowerOff, PowerOn, PowerType};
 }
 
 /// Create a "fake" module inside of `common` for all of the Tock `Cell` types.

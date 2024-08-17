@@ -165,3 +165,7 @@ pub trait PowerControl<T: PowerControl<T>> {
         )
     }
 }
+
+pub struct PersPower<T: PowerControl<T>> {
+    _peripheral: PhantomData<T>,
+}

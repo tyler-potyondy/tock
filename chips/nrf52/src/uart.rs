@@ -16,8 +16,8 @@ use kernel::hil::uart;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{
-    register_bitfields, PowerControl, PowerOff, PowerOn, PowerWrite, PrePowerConfig, ReadOnly,
-    ReadWrite, WriteOnly,
+    register_bitfields, PersistentPower, PowerControl, PowerOff, PowerOn, PowerWrite,
+    PrePowerConfig, ReadOnly, ReadWrite, WriteOnly,
 };
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
@@ -53,9 +53,9 @@ impl<'a> PowerControl<UarteRegisters> for UarteRegisters {
 
 #[repr(C)]
 pub struct UarteRegisters {
-    task_startrx: WriteOnly<u32, Self, Task::Register>,
+    task_startrx: PersistentPower<u32, Self, Task::Register>,
     task_stoprx: WriteOnly<u32, Self, Task::Register>,
-    task_starttx: WriteOnly<u32, Self, Task::Register>,
+    task_starttx: PersistentPower<u32, Self, Task::Register>,
     task_stoptx: WriteOnly<u32, Self, Task::Register>,
     _reserved1: [u32; 7],
     task_flush_rx: WriteOnly<u32, Self, Task::Register>,
@@ -313,7 +313,9 @@ impl<'a> Uarte<'a> {
         // be one pending. We clear it to be safe.
         //self.registers.event_endtx.write(Event::READY::CLEAR);
 
-        self.enable_uart(power_off);
+        // change this so that don't just turn on. keep disabled until we want to do
+        // something
+        self.power.replace(power_off);
     }
 
     fn set_baud_rate(
@@ -343,19 +345,19 @@ impl<'a> Uarte<'a> {
     }
 
     // Enable UART peripheral, this need to disabled for low power applications
-    fn enable_uart(&self, power_off: PowerOff<UarteRegisters>) {
-        self.registers.enable.power_on(power_off, Uart::ENABLE::ON);
+    fn enable_uart(&self, power_off: PowerOff<UarteRegisters>) -> PowerOn<UarteRegisters> {
+        self.registers.enable.power_on(power_off, Uart::ENABLE::ON)
     }
 
     #[allow(dead_code)]
-    fn disable_uart(&self, power_on: PowerOn<UarteRegisters>) {
-        self.registers.enable.power_off(power_on, Uart::ENABLE::OFF);
+    fn disable_uart(&self, power_on: PowerOn<UarteRegisters>) -> PowerOff<UarteRegisters> {
+        self.registers.enable.power_off(power_on, Uart::ENABLE::OFF)
     }
 
-    fn enable_rx_interrupts(&self, power_on: PowerOn<UarteRegisters>) {
+    fn enable_rx_interrupts(&self, power_on: PowerOn<UarteRegisters>) -> PowerOn<UarteRegisters> {
         self.registers
             .intenset
-            .write(Interrupt::ENDRX::SET, power_on);
+            .write(Interrupt::ENDRX::SET, power_on)
     }
 
     fn enable_tx_interrupts(&self, power_on: PowerOn<UarteRegisters>) -> PowerOn<UarteRegisters> {
@@ -416,11 +418,13 @@ impl<'a> Uarte<'a> {
                     Counter::COUNTER.val(min(rem as u32, UARTE_MAX_BUFFER_SIZE)),
                     power_on,
                 );
-                power_on = self
-                    .registers
+
+                power_on = self.enable_tx_interrupts(power_on);
+                self.registers
                     .task_starttx
                     .write(Task::ENABLE::SET, power_on);
-                power_on = self.enable_tx_interrupts(power_on);
+
+                return;
             }
         }
 
@@ -484,11 +488,11 @@ impl<'a> Uarte<'a> {
 
                     // Actually do the receive.
                     power_on = self.set_rx_dma_pointer_to_buffer(power_on);
-                    power_on = self
-                        .registers
+                    power_on = self.enable_rx_interrupts(power_on);
+
+                    self.registers
                         .task_startrx
                         .write(Task::ENABLE::SET, power_on);
-                    self.enable_rx_interrupts(power_on);
                 }
             }
         }
@@ -496,11 +500,7 @@ impl<'a> Uarte<'a> {
 
     /// Transmit one byte at the time and the client is responsible for polling
     /// This is used by the panic handler
-    pub unsafe fn send_byte(
-        &self,
-        byte: u8,
-        power_on: PowerOn<UarteRegisters>,
-    ) -> PowerOn<UarteRegisters> {
+    pub unsafe fn send_byte(&self, byte: u8, power_on: PowerOn<UarteRegisters>) {
         self.tx_remaining_bytes.set(1);
         let mut power_on = self
             .registers
@@ -518,7 +518,7 @@ impl<'a> Uarte<'a> {
             .write(Counter::COUNTER.val(1), power_on);
         self.registers
             .task_starttx
-            .write(Task::ENABLE::SET, power_on)
+            .write(Task::ENABLE::SET, power_on);
     }
 
     /// Check if the UART transmission is done
@@ -563,7 +563,7 @@ impl<'a> Uarte<'a> {
         buf: &'static mut [u8],
         tx_len: usize,
         power_on: PowerOn<UarteRegisters>,
-    ) -> PowerOn<UarteRegisters> {
+    ) {
         self.tx_remaining_bytes.set(tx_len);
         self.tx_len.set(tx_len);
         self.offset.set(0);
@@ -575,16 +575,15 @@ impl<'a> Uarte<'a> {
             power_on,
         );
 
-        power_on = self
-            .registers
+        power_on = self.enable_tx_interrupts(power_on);
+
+        self.registers
             .task_starttx
             .write(Task::ENABLE::SET, power_on);
-
-        self.enable_tx_interrupts(power_on)
     }
 }
 
-impl<'a> uart::TransmitTest<'a, UarteRegisters> for Uarte<'a> {
+impl<'a> uart::Transmit<'a> for Uarte<'a> {
     fn set_transmit_client(&self, client: &'a dyn uart::TransmitClient) {
         self.tx_client.set(client);
     }
@@ -593,16 +592,18 @@ impl<'a> uart::TransmitTest<'a, UarteRegisters> for Uarte<'a> {
         &self,
         tx_data: &'static mut [u8],
         tx_len: usize,
-        power_on: PowerOn<UarteRegisters>,
     ) -> Result<(), (ErrorCode, &'static mut [u8])> {
-        if tx_len == 0 || tx_len > tx_data.len() {
+        let power_on = self.enable_uart(self.power.take().unwrap());
+        let res = if tx_len == 0 || tx_len > tx_data.len() {
             Err((ErrorCode::SIZE, tx_data))
         } else if self.tx_buffer.is_some() {
             Err((ErrorCode::BUSY, tx_data))
         } else {
             self.setup_buffer_transmit(tx_data, tx_len, power_on);
             Ok(())
-        }
+        };
+
+        return res;
     }
 
     fn transmit_word(&self, _data: u32) -> Result<(), ErrorCode> {
@@ -614,27 +615,27 @@ impl<'a> uart::TransmitTest<'a, UarteRegisters> for Uarte<'a> {
     }
 }
 
-impl<'a> uart::ConfigureTest<'a, UarteRegisters> for Uarte<'a> {
-    fn configure(
-        &self,
-        params: uart::Parameters,
-        power_on: PowerOn<UarteRegisters>,
-    ) -> Result<(), ErrorCode> {
+impl<'a> uart::Configure for Uarte<'a> {
+    fn configure(&self, params: uart::Parameters) -> Result<(), ErrorCode> {
+        let mut power_on = self.enable_uart(self.power.take().unwrap());
+
+        let mut res = Ok(());
         // These could probably be implemented, but are currently ignored, so
         // throw an error.
         if params.stop_bits != uart::StopBits::One {
-            return Err(ErrorCode::NOSUPPORT);
+            res = Err(ErrorCode::NOSUPPORT);
         }
         if params.parity != uart::Parity::None {
-            return Err(ErrorCode::NOSUPPORT);
+            res = Err(ErrorCode::NOSUPPORT);
         }
         if params.hw_flow_control {
-            return Err(ErrorCode::NOSUPPORT);
+            res = Err(ErrorCode::NOSUPPORT);
         }
 
-        self.set_baud_rate(params.baud_rate, power_on);
+        power_on = self.set_baud_rate(params.baud_rate, power_on);
+        self.power.replace(self.disable_uart(power_on));
 
-        Ok(())
+        return res;
     }
 }
 
@@ -672,12 +673,12 @@ impl<'a> uart::ReceiveTest<'a, UarteRegisters> for Uarte<'a> {
             .task_stoprx
             .write(Task::ENABLE::SET, power_on);
 
-        power_on = self
-            .registers
+        power_on = self.enable_rx_interrupts(power_on);
+
+        self.registers
             .task_startrx
             .write(Task::ENABLE::SET, power_on);
 
-        self.enable_rx_interrupts(power_on);
         Ok(())
     }
 
