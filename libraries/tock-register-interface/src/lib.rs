@@ -155,7 +155,7 @@ impl<T: PowerControl<T>> Drop for PowerOff<T> {
 }
 
 pub trait PowerControl<T: PowerControl<T>> {
-    fn power_off();
+    fn power_off() -> PowerOff<T>;
     fn create(base_addr: u32) -> (*const T, PowerOff<T>) {
         (
             base_addr as *const T,

@@ -5,7 +5,7 @@
 //! Hardware interface layer (HIL) traits for UART communication.
 //!
 //!
-
+use crate::utilities::registers::{PowerControl, PowerOn};
 use crate::ErrorCode;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -87,6 +87,23 @@ pub trait Configure {
     fn configure(&self, params: Parameters) -> Result<(), ErrorCode>;
 }
 
+pub trait TransmitTest<'a, P: PowerControl<P>> {
+    fn set_transmit_client(&self, client: &'a dyn TransmitClient);
+
+    fn transmit_buffer(
+        &self,
+        tx_buffer: &'static mut [u8],
+        tx_len: usize,
+        power_on: PowerOn<P>,
+    ) -> Result<(), (ErrorCode, &'static mut [u8])>;
+    fn transmit_word(&self, word: u32) -> Result<(), ErrorCode>;
+    fn transmit_abort(&self) -> Result<(), ErrorCode>;
+}
+
+pub trait ConfigureTest<'a, P: PowerControl<P>> {
+    fn configure(&self, params: Parameters, power_on: PowerOn<P>) -> Result<(), ErrorCode>;
+}
+
 pub trait Transmit<'a> {
     /// Set the transmit client, which will be called when transmissions
     /// complete.
@@ -160,6 +177,21 @@ pub trait Transmit<'a> {
     ///    not be synchronously cancelled. A callback will be made on the
     ///    client indicating whether the call was successfully cancelled.
     fn transmit_abort(&self) -> Result<(), ErrorCode>;
+}
+
+pub trait ReceiveTest<'a, P: PowerControl<P>> {
+    fn set_receive_client(&self, client: &'a dyn ReceiveClient);
+
+    fn receive_buffer(
+        &self,
+        rx_buffer: &'static mut [u8],
+        rx_len: usize,
+        power_on: PowerOn<P>,
+    ) -> Result<(), (ErrorCode, &'static mut [u8])>;
+
+    fn receive_word(&self) -> Result<(), ErrorCode>;
+
+    fn receive_abort(&self, power_on: PowerOn<P>) -> Result<(), ErrorCode>;
 }
 
 pub trait Receive<'a> {

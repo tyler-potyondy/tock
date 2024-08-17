@@ -162,7 +162,7 @@
 //! ```
 
 use crate::fields::{Field, FieldValue, TryFromValue};
-use crate::{LocalRegisterCopy, RegisterLongName, UIntLike};
+use crate::{LocalRegisterCopy, PowerControl, PowerOn, RegisterLongName, UIntLike};
 
 /// Readable register
 ///
@@ -311,14 +311,19 @@ impl<T: Readable> Debuggable for T {}
 pub trait Writeable {
     type T: UIntLike;
     type R: RegisterLongName;
+    type P: PowerControl<Self::P>;
 
     /// Set the raw register value
-    fn set(&self, value: Self::T);
+    fn set(&self, value: Self::T, power: PowerOn<Self::P>) -> PowerOn<Self::P>;
 
     #[inline]
     /// Write the value of one or more fields, overwriting the other fields with zero
-    fn write(&self, field: FieldValue<Self::T, Self::R>) {
-        self.set(field.value);
+    fn write(
+        &self,
+        field: FieldValue<Self::T, Self::R>,
+        power: PowerOn<Self::P>,
+    ) -> PowerOn<Self::P> {
+        self.set(field.value, power)
     }
 
     #[inline]
@@ -328,8 +333,9 @@ pub trait Writeable {
         &self,
         original: LocalRegisterCopy<Self::T, Self::R>,
         field: FieldValue<Self::T, Self::R>,
+        power: PowerOn<Self::P>,
     ) {
-        self.set(field.modify(original.get()));
+        self.set(field.modify(original.get()), power);
     }
 }
 
@@ -345,20 +351,22 @@ pub trait Writeable {
 pub trait ReadWriteable {
     type T: UIntLike;
     type R: RegisterLongName;
+    type P: PowerControl<Self::P>;
 
     /// Write the value of one or more fields, leaving the other fields unchanged
-    fn modify(&self, field: FieldValue<Self::T, Self::R>);
+    fn modify(&self, field: FieldValue<Self::T, Self::R>, power: PowerOn<Self::P>);
 }
 
-impl<T: UIntLike, R: RegisterLongName, S> ReadWriteable for S
+impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>, S> ReadWriteable for S
 where
-    S: Readable<T = T, R = R> + Writeable<T = T, R = R>,
+    S: Readable<T = T, R = R> + Writeable<T = T, R = R, P = P>,
 {
     type T = T;
     type R = R;
+    type P = P;
 
     #[inline]
-    fn modify(&self, field: FieldValue<Self::T, Self::R>) {
-        self.set(field.modify(self.get()));
+    fn modify(&self, field: FieldValue<Self::T, Self::R>, power: PowerOn<Self::P>) {
+        self.set(field.modify(self.get()), power);
     }
 }

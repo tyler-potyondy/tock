@@ -6,25 +6,7 @@
 #![crate_name = "nrf52"]
 #![crate_type = "rlib"]
 
-pub mod acomp;
-pub mod adc;
-pub mod approtect;
-pub mod ble_radio;
-pub mod chip;
-pub mod clock;
-pub mod crt1;
-pub mod ficr;
-pub mod i2c;
-pub mod nvmc;
-pub mod power;
-pub mod ppi;
-pub mod pwm;
-pub mod spi;
 pub mod uart;
-pub mod uicr;
-pub mod usbd;
 
-pub use crate::crt1::init;
-pub use nrf5x::{
-    aes, constants, gpio, peripheral_interrupts, pinmux, rtc, temperature, timer, trng,
-};
+// pub use crate::crt1::init;
+pub use nrf5x::{constants, peripheral_interrupts};
