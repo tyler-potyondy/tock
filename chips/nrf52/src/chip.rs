@@ -4,9 +4,9 @@
 
 use core::fmt::Write;
 use cortexm4::{nvic, CortexM4, CortexMVariant};
-use kernel::platform::chip::InterruptService;
+use kernel::{platform::chip::InterruptService, utilities::registers::PowerControl};
 
-use crate::uart::UART0_BASE_ADDR;
+use crate::uart::{UarteRegisters, UART0_BASE_ADDR};
 
 pub struct NRF52<'a, I: InterruptService + 'a> {
     mpu: cortexm4::mpu::MPU,
@@ -95,7 +95,9 @@ impl<'a> kernel::platform::chip::InterruptService for Nrf52DefaultPeripherals<'a
             crate::peripheral_interrupts::TIMER0 => self.timer0.handle_interrupt(),
             crate::peripheral_interrupts::TIMER1 => self.timer1.handle_interrupt(),
             crate::peripheral_interrupts::TIMER2 => self.timer2.handle_interrupt(),
-            crate::peripheral_interrupts::UART0 => self.uarte0.handle_interrupt(),
+            crate::peripheral_interrupts::UART0 => {
+                self.uarte0.handle_interrupt(UarteRegisters::interrupt())
+            }
             crate::peripheral_interrupts::SPI0_TWI0 => self.spim0.handle_interrupt(),
             crate::peripheral_interrupts::SPI1_TWI1 => self.twi1.handle_interrupt(),
             crate::peripheral_interrupts::SPIM2_SPIS2_SPI2 => self.spim2.handle_interrupt(),

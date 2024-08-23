@@ -45,12 +45,11 @@ use crate::{PersPower, PowerControl, PowerOff, PowerOn, RegisterLongName, UIntLi
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct ReadWrite<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+pub struct ReadWrite<T: UIntLike, R: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
-    associated_power: PhantomData<P>,
 }
-impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Readable for ReadWrite<T, P, R> {
+impl<T: UIntLike, R: RegisterLongName> Readable for ReadWrite<T, R> {
     type T = T;
     type R = R;
 
@@ -59,19 +58,43 @@ impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Readable for ReadWrit
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Writeable for ReadWrite<T, P, R> {
+impl<T: UIntLike, R: RegisterLongName> Writeable for ReadWrite<T, R> {
     type T = T;
     type R = R;
-    type P = P;
 
     #[inline]
-    fn set(&self, value: T, power: PowerOn<P>) -> PowerOn<P> {
+    fn set(&self, value: T) {
         unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
-        power
     }
 }
 
 /// Read-only registers.
+#[allow(dead_code)]
+#[repr(transparent)]
+pub struct UartReadWrite<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+    value: UnsafeCell<T>,
+    associated_register: PhantomData<R>,
+    associated_power: PhantomData<P>,
+}
+impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Readable for UartReadWrite<T, P, R> {
+    type T = T;
+    type R = R;
+
+    #[inline]
+    fn get(&self) -> Self::T {
+        unsafe { ::core::ptr::read_volatile(self.value.get()) }
+    }
+}
+impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> UartReadWrite<T, P, R> {
+    pub fn write(&self, field: FieldValue<T, R>, power: PowerOn<P>) -> PowerOn<P> {
+        self.set(field.value, power)
+    }
+    #[inline]
+    pub fn set(&self, value: T, power: PowerOn<P>) -> PowerOn<P> {
+        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+        power
+    }
+}
 ///
 /// For accessing the register contents the [`Readable`] trait is
 /// implemented.
@@ -99,7 +122,22 @@ impl<T: UIntLike, R: RegisterLongName> Readable for ReadOnly<T, R> {
         unsafe { ::core::ptr::read_volatile(&self.value) }
     }
 }
+#[allow(dead_code)]
+#[repr(transparent)]
+pub struct UartReadOnly<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+    value: T,
+    associated_register: PhantomData<R>,
+    associated_power: PhantomData<P>,
+}
+impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> Readable for UartReadOnly<T, P, R> {
+    type T = T;
+    type R = R;
 
+    #[inline]
+    fn get(&self) -> T {
+        unsafe { ::core::ptr::read_volatile(&self.value) }
+    }
+}
 /// Power On Register
 #[allow(dead_code)]
 #[repr(transparent)]
@@ -180,19 +218,35 @@ impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> PersistentPower<T, P,
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct WriteOnly<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+pub struct WriteOnly<T: UIntLike, R: RegisterLongName = ()> {
+    value: UnsafeCell<T>,
+    associated_register: PhantomData<R>,
+}
+impl<T: UIntLike, R: RegisterLongName> Writeable for WriteOnly<T, R> {
+    type T = T;
+    type R = R;
+
+    #[inline]
+    fn set(&self, value: T) {
+        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+    }
+}
+
+#[allow(dead_code)]
+#[repr(transparent)]
+pub struct UartWriteOnly<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
     associated_power: PhantomData<P>,
 }
-impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Writeable for WriteOnly<T, P, R> {
-    type T = T;
-    type R = R;
-    type P = P;
+impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> UartWriteOnly<T, P, R> {
+    pub fn write(&self, field: FieldValue<T, R>, power: PowerOn<P>) -> PowerOn<P> {
+        self.set(field.value, power)
+    }
 
     #[inline]
-    fn set(&self, value: T, power: PowerOn<P>) -> PowerOn<P> {
-        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+    fn set(&self, field: T, power: PowerOn<P>) -> PowerOn<P> {
+        unsafe { ::core::ptr::write_volatile(self.value.get(), field) }
         power
     }
 }
@@ -221,19 +275,11 @@ impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Writeable for WriteOn
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct Aliased<
-    T: UIntLike,
-    P: PowerControl<P>,
-    R: RegisterLongName = (),
-    W: RegisterLongName = (),
-> {
+pub struct Aliased<T: UIntLike, R: RegisterLongName = (), W: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<(R, W)>,
-    associated_power: PhantomData<P>,
 }
-impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName, W: RegisterLongName> Readable
-    for Aliased<T, P, R, W>
-{
+impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Readable for Aliased<T, R, W> {
     type T = T;
     type R = R;
 
@@ -242,17 +288,13 @@ impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName, W: RegisterLongName> 
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName, P: PowerControl<P>> Writeable
-    for Aliased<T, P, R, W>
-{
+impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Writeable for Aliased<T, R, W> {
     type T = T;
     type R = W;
-    type P = P;
 
     #[inline]
-    fn set(&self, value: Self::T, power: PowerOn<P>) -> PowerOn<P> {
+    fn set(&self, value: Self::T) {
         unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
-        power
     }
 }
 
@@ -269,22 +311,20 @@ impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName, P: PowerControl<P>> 
 // To successfully alias this structure onto hardware registers in memory, this
 // struct must be exactly the size of the `T`.
 #[repr(transparent)]
-pub struct InMemoryRegister<T: UIntLike, P: PowerControl<P>, R: RegisterLongName = ()> {
+pub struct InMemoryRegister<T: UIntLike, R: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
-    associated_power: PhantomData<P>,
 }
 
-impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> InMemoryRegister<T, P, R> {
+impl<T: UIntLike, R: RegisterLongName> InMemoryRegister<T, R> {
     pub const fn new(value: T) -> Self {
         InMemoryRegister {
             value: UnsafeCell::new(value),
             associated_register: PhantomData,
-            associated_power: PhantomData,
         }
     }
 }
-impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Readable for InMemoryRegister<T, P, R> {
+impl<T: UIntLike, R: RegisterLongName> Readable for InMemoryRegister<T, R> {
     type T = T;
     type R = R;
 
@@ -293,14 +333,12 @@ impl<T: UIntLike, R: RegisterLongName, P: PowerControl<P>> Readable for InMemory
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> Writeable for InMemoryRegister<T, P, R> {
+impl<T: UIntLike, R: RegisterLongName> Writeable for InMemoryRegister<T, R> {
     type T = T;
     type R = R;
-    type P = P;
 
     #[inline]
-    fn set(&self, value: T, power: PowerOn<P>) -> PowerOn<P> {
+    fn set(&self, value: T) {
         unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
-        power
     }
 }

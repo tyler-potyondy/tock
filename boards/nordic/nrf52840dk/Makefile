@@ -4,6 +4,9 @@
 
 # Makefile for building the tock kernel for the nRF development kit
 
+TARGET=thumbv7em-none-eabi
+PLATFORM=nrf52840dk
+
 include ../../Makefile.common
 
 TOCKLOADER=tockloader

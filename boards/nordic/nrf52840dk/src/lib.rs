@@ -410,10 +410,16 @@ pub unsafe fn start() -> (
     // Apply errata fixes and enable interrupts.
     nrf52840::init();
 
+    // Set up peripheral drivers. Called in separate function to reduce stack
+    // usage.
+    let ieee802154_ack_buf = static_init!(
+        [u8; nrf52840::ieee802154_radio::ACK_BUF_SIZE],
+        [0; nrf52840::ieee802154_radio::ACK_BUF_SIZE]
+    );
     // Initialize chip peripheral drivers
     let nrf52840_peripherals = static_init!(
         Nrf52840DefaultPeripherals,
-        Nrf52840DefaultPeripherals::new()
+        Nrf52840DefaultPeripherals::new(ieee802154_ack_buf)
     );
 
     // Set up circular peripheral dependencies.

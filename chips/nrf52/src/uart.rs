@@ -17,7 +17,7 @@ use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{
     register_bitfields, PersistentPower, PowerControl, PowerOff, PowerOn, PowerWrite,
-    PrePowerConfig, ReadOnly, ReadWrite, WriteOnly,
+    PrePowerConfig, ReadOnly, UartReadWrite, UartWriteOnly,
 };
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
@@ -54,33 +54,33 @@ impl<'a> PowerControl<UarteRegisters> for UarteRegisters {
 #[repr(C)]
 pub struct UarteRegisters {
     task_startrx: PersistentPower<u32, Self, Task::Register>,
-    task_stoprx: WriteOnly<u32, Self, Task::Register>,
+    task_stoprx: UartWriteOnly<u32, Self, Task::Register>,
     task_starttx: PersistentPower<u32, Self, Task::Register>,
-    task_stoptx: WriteOnly<u32, Self, Task::Register>,
+    task_stoptx: UartWriteOnly<u32, Self, Task::Register>,
     _reserved1: [u32; 7],
-    task_flush_rx: WriteOnly<u32, Self, Task::Register>,
+    task_flush_rx: UartWriteOnly<u32, Self, Task::Register>,
     _reserved2: [u32; 52],
-    event_cts: ReadWrite<u32, Self, Event::Register>,
-    event_ncts: ReadWrite<u32, Self, Event::Register>,
+    event_cts: UartReadWrite<u32, Self, Event::Register>,
+    event_ncts: UartReadWrite<u32, Self, Event::Register>,
     _reserved3: [u32; 2],
-    event_endrx: ReadWrite<u32, Self, Event::Register>,
+    event_endrx: UartReadWrite<u32, Self, Event::Register>,
     _reserved4: [u32; 3],
-    event_endtx: ReadWrite<u32, Self, Event::Register>,
-    event_error: ReadWrite<u32, Self, Event::Register>,
+    event_endtx: UartReadWrite<u32, Self, Event::Register>,
+    event_error: UartReadWrite<u32, Self, Event::Register>,
     _reserved6: [u32; 7],
-    event_rxto: ReadWrite<u32, Self, Event::Register>,
+    event_rxto: UartReadWrite<u32, Self, Event::Register>,
     _reserved7: [u32; 1],
-    event_rxstarted: ReadWrite<u32, Self, Event::Register>,
-    event_txstarted: ReadWrite<u32, Self, Event::Register>,
+    event_rxstarted: UartReadWrite<u32, Self, Event::Register>,
+    event_txstarted: UartReadWrite<u32, Self, Event::Register>,
     _reserved8: [u32; 1],
-    event_txstopped: ReadWrite<u32, Self, Event::Register>,
+    event_txstopped: UartReadWrite<u32, Self, Event::Register>,
     _reserved9: [u32; 41],
-    shorts: ReadWrite<u32, Self, Shorts::Register>,
+    shorts: UartReadWrite<u32, Self, Shorts::Register>,
     _reserved10: [u32; 64],
-    intenset: ReadWrite<u32, Self, Interrupt::Register>,
-    intenclr: ReadWrite<u32, Self, Interrupt::Register>,
+    intenset: UartReadWrite<u32, Self, Interrupt::Register>,
+    intenclr: UartReadWrite<u32, Self, Interrupt::Register>,
     _reserved11: [u32; 93],
-    errorsrc: ReadWrite<u32, Self, ErrorSrc::Register>,
+    errorsrc: UartReadWrite<u32, Self, ErrorSrc::Register>,
     _reserved12: [u32; 31],
     enable: PowerWrite<u32, Self, Uart::Register>,
     _reserved13: [u32; 1],
@@ -89,17 +89,17 @@ pub struct UarteRegisters {
     pselcts: PrePowerConfig<u32, Self, Psel::Register>,
     pselrxd: PrePowerConfig<u32, Self, Psel::Register>,
     _reserved14: [u32; 3],
-    baudrate: ReadWrite<u32, Self, Baudrate::Register>,
+    baudrate: UartReadWrite<u32, Self, Baudrate::Register>,
     _reserved15: [u32; 3],
-    rxd_ptr: ReadWrite<u32, Self, Pointer::Register>,
-    rxd_maxcnt: ReadWrite<u32, Self, Counter::Register>,
+    rxd_ptr: UartReadWrite<u32, Self, Pointer::Register>,
+    rxd_maxcnt: UartReadWrite<u32, Self, Counter::Register>,
     rxd_amount: ReadOnly<u32, Counter::Register>,
     _reserved16: [u32; 1],
-    txd_ptr: ReadWrite<u32, Self, Pointer::Register>,
-    txd_maxcnt: ReadWrite<u32, Self, Counter::Register>,
+    txd_ptr: UartReadWrite<u32, Self, Pointer::Register>,
+    txd_maxcnt: UartReadWrite<u32, Self, Counter::Register>,
     txd_amount: ReadOnly<u32, Counter::Register>,
     _reserved17: [u32; 7],
-    config: ReadWrite<u32, Self, Config::Register>,
+    config: UartReadWrite<u32, Self, Config::Register>,
 }
 
 register_bitfields! [u32,
@@ -500,9 +500,10 @@ impl<'a> Uarte<'a> {
 
     /// Transmit one byte at the time and the client is responsible for polling
     /// This is used by the panic handler
-    pub unsafe fn send_byte(&self, byte: u8, power_on: PowerOn<UarteRegisters>) {
+    pub unsafe fn send_byte(&self, byte: u8) {
+        let mut power_on = self.enable_uart(self.power.take().unwrap());
         self.tx_remaining_bytes.set(1);
-        let mut power_on = self
+        power_on = self
             .registers
             .event_endtx
             .write(Event::READY::CLEAR, power_on);
@@ -639,7 +640,7 @@ impl<'a> uart::Configure for Uarte<'a> {
     }
 }
 
-impl<'a> uart::ReceiveTest<'a, UarteRegisters> for Uarte<'a> {
+impl<'a> uart::Receive<'a> for Uarte<'a> {
     fn set_receive_client(&self, client: &'a dyn uart::ReceiveClient) {
         self.rx_client.set(client);
     }
@@ -648,8 +649,8 @@ impl<'a> uart::ReceiveTest<'a, UarteRegisters> for Uarte<'a> {
         &self,
         rx_buf: &'static mut [u8],
         rx_len: usize,
-        power_on: PowerOn<UarteRegisters>,
     ) -> Result<(), (ErrorCode, &'static mut [u8])> {
+        let power_on = self.enable_uart(self.power.take().unwrap());
         if self.rx_buffer.is_some() {
             return Err((ErrorCode::BUSY, rx_buf));
         }
@@ -686,16 +687,19 @@ impl<'a> uart::ReceiveTest<'a, UarteRegisters> for Uarte<'a> {
         Err(ErrorCode::FAIL)
     }
 
-    fn receive_abort(&self, power_on: PowerOn<UarteRegisters>) -> Result<(), ErrorCode> {
+    fn receive_abort(&self) -> Result<(), ErrorCode> {
         // Trigger the STOPRX event to cancel the current receive call.
-        if self.rx_buffer.is_none() {
-            Ok(())
-        } else {
-            self.rx_abort_in_progress.set(true);
-            self.registers
-                .task_stoprx
-                .write(Task::ENABLE::SET, power_on);
-            Err(ErrorCode::BUSY)
-        }
+        // if self.rx_buffer.is_none() {
+        //     Ok(())
+        // } else {
+        //     self.rx_abort_in_progress.set(true);
+        //     self.registers
+        //         .task_stoprx
+        //         .write(Task::ENABLE::SET, power_on);
+        //     Err(ErrorCode::BUSY)
+        // }
+
+        // TODO
+        Ok(())
     }
 }

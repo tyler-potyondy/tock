@@ -136,18 +136,15 @@ pub trait RegisterLongName {}
 // (e.g. no fields need to be accessed, just the raw register values)
 impl RegisterLongName for () {}
 
-pub trait PowerType: Sized {}
-
 pub struct PowerOff<T: PowerControl<T>> {
     _peripheral: PhantomData<T>,
 }
 
-impl<T: PowerControl<T>> PowerType for PowerOff<T> {}
 pub struct PowerOn<T: PowerControl<T>> {
     _peripheral: PhantomData<T>,
 }
 
-impl<T: PowerControl<T>> Drop for PowerOff<T> {
+impl<T: PowerControl<T>> Drop for PowerOn<T> {
     fn drop(&mut self) {
         // Disable the peripheral
         T::power_off();
@@ -163,6 +160,11 @@ pub trait PowerControl<T: PowerControl<T>> {
                 _peripheral: PhantomData,
             },
         )
+    }
+    fn interrupt() -> PowerOn<T> {
+        PowerOn {
+            _peripheral: PhantomData,
+        }
     }
 }
 
