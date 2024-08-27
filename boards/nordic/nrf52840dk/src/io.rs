@@ -7,7 +7,7 @@ use kernel::debug::IoWrite;
 use kernel::hil::uart;
 use kernel::hil::uart::Configure;
 
-use nrf52840::uart::{Uarte, UARTE0_BASE};
+use nrf52840::uart::{Uarte, UARTE0_BASE_ADDR};
 
 enum Writer {
     WriterUart(/* initialized */ bool),
@@ -40,26 +40,6 @@ impl Write for Writer {
 impl IoWrite for Writer {
     fn write(&mut self, buf: &[u8]) -> usize {
         match self {
-            Writer::WriterUart(ref mut initialized) => {
-                // Here, we create a second instance of the Uarte struct.
-                // This is okay because we only call this during a panic, and
-                // we will never actually process the interrupts
-                let uart = Uarte::new(UARTE0_BASE);
-                if !*initialized {
-                    *initialized = true;
-                    let _ = uart.configure(uart::Parameters {
-                        baud_rate: 115200,
-                        stop_bits: uart::StopBits::One,
-                        parity: uart::Parity::None,
-                        hw_flow_control: false,
-                        width: uart::Width::Eight,
-                    });
-                }
-                for &c in buf {
-                    unsafe { panic!() }
-                    while !uart.tx_ready() {}
-                }
-            }
             Writer::WriterRtt(rtt_memory) => {
                 let up_buffer = unsafe { &*rtt_memory.get_up_buffer_ptr() };
                 let buffer_len = up_buffer.length.get();
@@ -79,6 +59,7 @@ impl IoWrite for Writer {
                     wait();
                 }
             }
+            _ => (),
         };
         buf.len()
     }

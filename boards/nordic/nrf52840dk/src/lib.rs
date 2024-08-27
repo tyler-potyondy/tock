@@ -206,13 +206,13 @@ pub struct Platform {
         VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
     >,
     button: &'static capsules_core::button::Button<'static, nrf52840::gpio::GPIOPin<'static>>,
-    pconsole: &'static capsules_core::process_console::ProcessConsole<
-        'static,
-        { capsules_core::process_console::DEFAULT_COMMAND_HISTORY_LEN },
-        VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
-        components::process_console::Capability,
-    >,
-    console: &'static capsules_core::console::Console<'static>,
+    //pconsole: &'static capsules_core::process_console::ProcessConsole<
+    //    'static,
+    //    { capsules_core::process_console::DEFAULT_COMMAND_HISTORY_LEN },
+    //    VirtualMuxAlarm<'static, nrf52840::rtc::Rtc<'static>>,
+    //    components::process_console::Capability,
+    //>,
+    //console: &'static capsules_core::console::Console<'static>,
     gpio: &'static capsules_core::gpio::GPIO<'static, nrf52840::gpio::GPIOPin<'static>>,
     led: &'static capsules_core::led::LedDriver<
         'static,
@@ -251,7 +251,7 @@ impl SyscallDriverLookup for Platform {
         F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
     {
         match driver_num {
-            capsules_core::console::DRIVER_NUM => f(Some(self.console)),
+            //capsules_core::console::DRIVER_NUM => f(Some(self.console)),
             capsules_core::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules_core::led::DRIVER_NUM => f(Some(self.led)),
@@ -447,7 +447,7 @@ pub unsafe fn start() -> (
     // Choose the channel for serial output. This board can be configured to use
     // either the Segger RTT channel or via UART with traditional TX/RX GPIO
     // pins.
-    let uart_channel = UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD));
+    //    let uart_channel = UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD));
 
     // Setup space to store the core kernel data structure.
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
@@ -575,14 +575,14 @@ pub unsafe fn start() -> (
     // UART & CONSOLE & DEBUG
     //--------------------------------------------------------------------------
 
-    let uart_channel = nrf52_components::UartChannelComponent::new(
+    /*  let uart_channel = nrf52_components::UartChannelComponent::new(
         uart_channel,
         mux_alarm,
         &base_peripherals.uarte0,
     )
     .finalize(nrf52_components::uart_channel_component_static!(
         nrf52840::rtc::Rtc
-    ));
+    )); */
 
     let uart_channel_rtt = nrf52_components::UartChannelComponent::new(
         uart_channel_rtt,
@@ -599,31 +599,31 @@ pub unsafe fn start() -> (
     PROCESS_PRINTER = Some(process_printer);
 
     // Virtualize the UART channel for the console and for kernel debug.
-    let uart_mux = components::console::UartMuxComponent::new(uart_channel, 115200)
-        .finalize(components::uart_mux_component_static!());
+    //let uart_mux = components::console::UartMuxComponent::new(uart_channel, 115200)
+    //    .finalize(components::uart_mux_component_static!());
 
     let uart_mux_rtt = components::console::UartMuxComponent::new(uart_channel_rtt, 115200)
         .finalize(components::uart_mux_component_static!());
     // Create the process console, an interactive terminal for managing
     // processes.
-    let pconsole = components::process_console::ProcessConsoleComponent::new(
-        board_kernel,
-        uart_mux,
-        mux_alarm,
-        process_printer,
-        Some(cortexm4::support::reset),
-    )
-    .finalize(components::process_console_component_static!(
-        nrf52840::rtc::Rtc<'static>
-    ));
+    //let pconsole = components::process_console::ProcessConsoleComponent::new(
+    //    board_kernel,
+    //    uart_mux,
+    //    mux_alarm,
+    //    process_printer,
+    //    Some(cortexm4::support::reset),
+    //)
+    //.finalize(components::process_console_component_static!(
+    //    nrf52840::rtc::Rtc<'static>
+    //));
 
     // Setup the serial console for userspace.
-    let console = components::console::ConsoleComponent::new(
-        board_kernel,
-        capsules_core::console::DRIVER_NUM,
-        uart_mux,
-    )
-    .finalize(components::console_component_static!());
+    //let console = components::console::ConsoleComponent::new(
+    //    board_kernel,
+    //    capsules_core::console::DRIVER_NUM,
+    //    uart_mux,
+    //)
+    //.finalize(components::console_component_static!());
 
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux_rtt)
@@ -896,8 +896,8 @@ pub unsafe fn start() -> (
     let platform = Platform {
         button,
         ble_radio,
-        pconsole,
-        console,
+        //pconsole,
+        //console,
         led,
         gpio,
         rng,
@@ -917,7 +917,7 @@ pub unsafe fn start() -> (
         systick: cortexm4::systick::SysTick::new_with_calibration(64000000),
     };
 
-    let _ = platform.pconsole.start();
+    // let _ = platform.pconsole.start();
     base_peripherals.adc.calibrate();
 
     debug!("Initialization complete. Entering main loop\r");
