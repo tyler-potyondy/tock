@@ -24,8 +24,8 @@ pub mod registers {
     pub use tock_registers::interfaces;
     pub use tock_registers::registers::InMemoryRegister;
     pub use tock_registers::registers::{
-        Aliased, PersistentPower, PowerWrite, PrePowerConfig, ReadOnly, ReadWrite, UartReadOnly,
-        UartReadWrite, UartWriteOnly, WriteOnly,
+        Aliased, PowerWrite, PrePowerConfig, ReadOnly, ReadWrite, UartReadOnly, UartReadWrite,
+        UartWriteOnly, WriteOnly,
     };
     pub use tock_registers::{register_bitfields, register_structs};
     pub use tock_registers::{LocalRegisterCopy, RegisterLongName};

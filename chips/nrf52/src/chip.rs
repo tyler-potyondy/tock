@@ -4,9 +4,7 @@
 
 use core::fmt::Write;
 use cortexm4::{nvic, CortexM4, CortexMVariant};
-use kernel::{platform::chip::InterruptService, utilities::registers::PowerControl};
-
-use crate::uart::{UarteRegisters, UART0_BASE_ADDR};
+use kernel::platform::chip::InterruptService;
 
 pub struct NRF52<'a, I: InterruptService + 'a> {
     mpu: cortexm4::mpu::MPU,
@@ -63,7 +61,7 @@ impl<'a> Nrf52DefaultPeripherals<'a> {
             timer0: crate::timer::TimerAlarm::new(0),
             timer1: crate::timer::TimerAlarm::new(1),
             timer2: crate::timer::Timer::new(2),
-            uarte0: crate::uart::Uarte::new(UART0_BASE_ADDR),
+            uarte0: crate::uart::Uarte::new(crate::uart::UARTE0_BASE),
             spim0: crate::spi::SPIM::new(0),
             twi1: crate::i2c::TWI::new_twi1(),
             spim2: crate::spi::SPIM::new(2),
@@ -95,9 +93,7 @@ impl<'a> kernel::platform::chip::InterruptService for Nrf52DefaultPeripherals<'a
             crate::peripheral_interrupts::TIMER0 => self.timer0.handle_interrupt(),
             crate::peripheral_interrupts::TIMER1 => self.timer1.handle_interrupt(),
             crate::peripheral_interrupts::TIMER2 => self.timer2.handle_interrupt(),
-            crate::peripheral_interrupts::UART0 => {
-                self.uarte0.handle_interrupt(UarteRegisters::interrupt())
-            }
+            crate::peripheral_interrupts::UART0 => self.uarte0.handle_interrupt(),
             crate::peripheral_interrupts::SPI0_TWI0 => self.spim0.handle_interrupt(),
             crate::peripheral_interrupts::SPI1_TWI1 => self.twi1.handle_interrupt(),
             crate::peripheral_interrupts::SPIM2_SPIS2_SPI2 => self.spim2.handle_interrupt(),

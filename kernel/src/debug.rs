@@ -68,7 +68,7 @@ use crate::processbuffer::ReadableProcessSlice;
 use crate::utilities::binary_write::BinaryToWriteWrapper;
 use crate::utilities::cells::NumericCellExt;
 use crate::utilities::cells::{MapCell, TakeCell};
-use crate::ErrorCode;
+// use crate::ErrorCode;
 
 /// This trait is similar to std::io::Write in that it takes bytes instead of a string (contrary to
 /// core::fmt::Write), but io::Write isn't available in no_std (due to std::io::Error not being
@@ -395,7 +395,7 @@ pub struct DebugWriterWrapper {
 /// the UART provider and this debug module.
 pub struct DebugWriter {
     // What provides the actual writing mechanism.
-    uart: &'static dyn hil::uart::Transmit<'static>,
+    // uart: &'static dyn hil::uart::Transmit<'static>,
     // The buffer that is passed to the writing mechanism.
     output_buffer: TakeCell<'static, [u8]>,
     // An internal buffer that is used to hold debug!() calls as they come in.
@@ -431,12 +431,12 @@ impl DebugWriterWrapper {
 
 impl DebugWriter {
     pub fn new(
-        uart: &'static dyn hil::uart::Transmit,
+        // uart: &'static dyn hil::uart::Transmit,
         out_buffer: &'static mut [u8],
         internal_buffer: &'static mut RingBuffer<'static, u8>,
     ) -> DebugWriter {
         DebugWriter {
-            uart,
+            // uart,
             output_buffer: TakeCell::new(out_buffer),
             internal_buffer: TakeCell::new(internal_buffer),
             count: Cell::new(0), // how many debug! calls
@@ -474,11 +474,11 @@ impl DebugWriter {
 
                 if count != 0 {
                     // Transmit the data in the output buffer.
-                    if let Err((_err, buf)) = self.uart.transmit_buffer(out_buffer, count) {
+                    /*  if let Err((_err, buf)) = self.uart.transmit_buffer(out_buffer, count) {
                         self.output_buffer.put(Some(buf));
                     } else {
                         self.output_buffer.put(None);
-                    }
+                    }*/
                 }
                 count
             } else {
@@ -496,7 +496,7 @@ impl DebugWriter {
     }
 }
 
-impl hil::uart::TransmitClient for DebugWriter {
+/*impl hil::uart::TransmitClient for DebugWriter {
     fn transmitted_buffer(
         &self,
         buffer: &'static mut [u8],
@@ -513,7 +513,7 @@ impl hil::uart::TransmitClient for DebugWriter {
     }
     fn transmitted_word(&self, _rcode: core::result::Result<(), ErrorCode>) {}
 }
-
+*/
 /// Pass through functions.
 impl DebugWriterWrapper {
     fn increment_count(&self) {

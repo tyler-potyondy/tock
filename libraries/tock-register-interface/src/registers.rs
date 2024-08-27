@@ -174,7 +174,7 @@ pub struct PrePowerConfig<T: UIntLike, P: PowerControl<P>, R: RegisterLongName =
 }
 
 impl<T: UIntLike, P: PowerControl<P>, R: RegisterLongName> PrePowerConfig<T, P, R> {
-    pub fn config_write(&self, power: PowerOff<P>, field: FieldValue<T, R>) -> PowerOff<P> {
+    pub fn write(&self, power: PowerOff<P>, field: FieldValue<T, R>) -> PowerOff<P> {
         unsafe {
             ::core::ptr::write_volatile(self.value.get(), field.value);
         }

@@ -65,30 +65,36 @@ pub enum Error {
     Aborted,
 }
 
-pub trait Uart<'a>: Configure + Transmit<'a> + Receive<'a> {}
-pub trait UartData<'a>: Transmit<'a> + Receive<'a> {}
-pub trait UartAdvanced<'a>: Configure + Transmit<'a> + ReceiveAdvanced<'a> {}
-pub trait Client: ReceiveClient + TransmitClient {}
+pub trait Uart<'a, P: PowerControl<P>>: Configure<P> + Transmit<'a, P> + Receive<'a, P> {}
+pub trait UartData<'a, P: PowerControl<P>>: Transmit<'a, P> + Receive<'a, P> {}
+pub trait UartAdvanced<'a, P: PowerControl<P>>:
+    Configure<P> + Transmit<'a, P> + ReceiveAdvanced<'a, P>
+{
+}
+pub trait Client<P: PowerControl<P>>: ReceiveClient + TransmitClient<P> {}
 
 // Provide blanket implementations for all trait groups
-impl<'a, T: Configure + Transmit<'a> + Receive<'a>> Uart<'a> for T {}
-impl<'a, T: Transmit<'a> + Receive<'a>> UartData<'a> for T {}
-impl<'a, T: Configure + Transmit<'a> + ReceiveAdvanced<'a>> UartAdvanced<'a> for T {}
-impl<T: ReceiveClient + TransmitClient> Client for T {}
+impl<'a, P: PowerControl<P>, T: Configure<P> + Transmit<'a, P> + Receive<'a, P>> Uart<'a, P> for T {}
+impl<'a, P: PowerControl<P>, T: Transmit<'a, P> + Receive<'a, P>> UartData<'a, P> for T {}
+impl<'a, P: PowerControl<P>, T: Configure<P> + Transmit<'a, P> + ReceiveAdvanced<'a, P>>
+    UartAdvanced<'a, P> for T
+{
+}
+impl<P: PowerControl<P>, T: ReceiveClient + TransmitClient<P>> Client<P> for T {}
 
 /// Trait for configuring a UART.
-pub trait Configure {
+pub trait Configure<P: PowerControl<P>> {
     /// Returns Ok(()), or
     /// - OFF: The underlying hardware is currently not available, perhaps
     ///         because it has not been initialized or in the case of a shared
     ///         hardware USART controller because it is set up for SPI.
     /// - INVAL: Impossible parameters (e.g. a `baud_rate` of 0)
     /// - ENOSUPPORT: The underlying UART cannot satisfy this configuration.
-    fn configure(&self, params: Parameters) -> Result<(), ErrorCode>;
+    fn configure(&self, params: Parameters, power_on: PowerOn<P>) -> Result<(), ErrorCode>;
 }
 
 pub trait TransmitTest<'a, P: PowerControl<P>> {
-    fn set_transmit_client(&self, client: &'a dyn TransmitClient);
+    fn set_transmit_client(&self, client: &'a dyn TransmitClient<P>);
 
     fn transmit_buffer(
         &self,
@@ -104,10 +110,10 @@ pub trait ConfigureTest<'a, P: PowerControl<P>> {
     fn configure(&self, params: Parameters, power_on: PowerOn<P>) -> Result<(), ErrorCode>;
 }
 
-pub trait Transmit<'a> {
+pub trait Transmit<'a, P: PowerControl<P>> {
     /// Set the transmit client, which will be called when transmissions
     /// complete.
-    fn set_transmit_client(&self, client: &'a dyn TransmitClient);
+    fn set_transmit_client(&self, client: &'a dyn TransmitClient<P>);
 
     /// Transmit a buffer of data. On completion, `transmitted_buffer`
     /// in the `TransmitClient` will be called.  If the `Result<(), ErrorCode>`
@@ -136,7 +142,8 @@ pub trait Transmit<'a> {
         &self,
         tx_buffer: &'static mut [u8],
         tx_len: usize,
-    ) -> Result<(), (ErrorCode, &'static mut [u8])>;
+        power: PowerOn<P>,
+    ) -> Result<(), (ErrorCode, &'static mut [u8], PowerOn<P>)>;
 
     /// Transmit a single word of data asynchronously. The word length is
     /// determined by the UART configuration: it can be 6, 7, 8, or 9 bits long.
@@ -153,7 +160,7 @@ pub trait Transmit<'a> {
     /// Calling `transmit_word` while there is an outstanding
     /// `transmit_buffer` or `transmit_word` operation will return
     /// BUSY.
-    fn transmit_word(&self, word: u32) -> Result<(), ErrorCode>;
+    fn transmit_word(&self, word: u32, power: PowerOn<P>) -> Result<(), (ErrorCode, PowerOn<P>)>;
 
     /// Abort an outstanding call to `transmit_word` or `transmit_buffer`.
     /// The return code indicates whether the call has fully terminated or
@@ -176,7 +183,7 @@ pub trait Transmit<'a> {
     ///  - FAIL if the outstanding call to either transmit operation could
     ///    not be synchronously cancelled. A callback will be made on the
     ///    client indicating whether the call was successfully cancelled.
-    fn transmit_abort(&self) -> Result<(), ErrorCode>;
+    fn transmit_abort(&self, power: PowerOn<P>) -> Result<(), (ErrorCode, PowerOn<P>)>;
 }
 
 pub trait ReceiveTest<'a, P: PowerControl<P>> {
@@ -194,7 +201,7 @@ pub trait ReceiveTest<'a, P: PowerControl<P>> {
     fn receive_abort(&self, power_on: PowerOn<P>) -> Result<(), ErrorCode>;
 }
 
-pub trait Receive<'a> {
+pub trait Receive<'a, P: PowerControl<P>> {
     /// Set the receive client, which will he called when reads complete.
     fn set_receive_client(&self, client: &'a dyn ReceiveClient);
 
@@ -220,6 +227,7 @@ pub trait Receive<'a> {
         &self,
         rx_buffer: &'static mut [u8],
         rx_len: usize,
+        power_on: PowerOn<P>,
     ) -> Result<(), (ErrorCode, &'static mut [u8])>;
 
     /// Receive a single word of data. The word length is determined
@@ -252,7 +260,7 @@ pub trait Receive<'a> {
 
 /// Trait implemented by a UART transmitter to receive callbacks when
 /// operations complete.
-pub trait TransmitClient {
+pub trait TransmitClient<P: PowerControl<P>> {
     /// A call to `Transmit::transmit_word` completed. The `Result<(), ErrorCode>`
     /// indicates whether the word was successfully transmitted. A call
     /// to `transmit_word` or `transmit_buffer` made within this callback
@@ -263,7 +271,7 @@ pub trait TransmitClient {
     ///   - CANCEL if the call to `transmit_word` was cancelled and
     ///     the word was not transmitted.
     ///   - FAIL if the transmission failed in some way.
-    fn transmitted_word(&self, _rval: Result<(), ErrorCode>) {}
+    fn transmitted_word(&self, _rval: Result<(), ErrorCode>, _power: PowerOn<P>) {}
 
     /// A call to `Transmit::transmit_buffer` completed. The `Result<(), ErrorCode>`
     /// indicates whether the buffer was successfully transmitted. A call
@@ -288,6 +296,7 @@ pub trait TransmitClient {
         tx_buffer: &'static mut [u8],
         tx_len: usize,
         rval: Result<(), ErrorCode>,
+        power: PowerOn<P>,
     );
 }
 
@@ -351,7 +360,7 @@ pub trait ReceiveClient {
 /// - `receive_len_then_message`: This would do a one byte read to get a length
 ///   byte and then read that many more bytes from UART before returning to the
 ///   client.
-pub trait ReceiveAdvanced<'a>: Receive<'a> {
+pub trait ReceiveAdvanced<'a, P: PowerControl<P>>: Receive<'a, P> {
     /// Receive data until `interbyte_timeout` bit periods have passed since the
     /// last byte or buffer is full. Does not timeout until at least one byte
     /// has been received.
