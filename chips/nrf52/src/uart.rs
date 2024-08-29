@@ -25,6 +25,14 @@ use nrf5x::pinmux;
 
 use crate::power::{self, Power};
 
+// STATES
+// (RX) (RXTX) (TX) (OFF)
+//       |->  (RX)-------|
+//       |->  (RXTX)-----|
+// (OFF) |->  (TX) ------|
+//  ^--------------------|
+//
+
 const UARTE_MAX_BUFFER_SIZE: u32 = 0xff;
 
 static mut BYTE: u8 = 0;
@@ -37,7 +45,8 @@ enum UartState {
     Disabled(PowerOff<UarteRegisters>),
     RxTx(PowerOn<UarteRegisters>),
     Aborting(PowerOn<UarteRegisters>),
-    Idle,
+    Rx(PowerOn<UarteRegisters>),
+    Tx(PowerOn<UarteRegisters>),
 }
 
 #[repr(C)]
@@ -317,7 +326,6 @@ impl<'a> Uarte<'a> {
 
     // Enable UART peripheral, this need to disabled for low power applications
     fn enable_uart(&self, power_off: PowerOff<UarteRegisters>) -> PowerOn<UarteRegisters> {
-        self.uart_state.replace(UartState::Idle);
         self.registers.enable.power_on(power_off, Uart::ENABLE::ON)
     }
 
@@ -355,141 +363,148 @@ impl<'a> Uarte<'a> {
     /// UART interrupt handler that listens for both tx_end and rx_end events
     #[inline(never)]
     pub fn handle_interrupt(&self) {
-        let mut disable = false;
         kernel::debug!("handle interrupt");
-        match self.uart_state.take().unwrap() {
-            UartState::RxTx(mut power_on) => {
-                if self.tx_ready() {
-                    power_on = self.disable_tx_interrupts(power_on);
-                    power_on = self
-                        .registers
-                        .event_endtx
-                        .write(Event::READY::CLEAR, power_on);
-                    let tx_bytes = self.registers.txd_amount.get() as usize;
 
-                    let rem = match self.tx_remaining_bytes.get().checked_sub(tx_bytes) {
-                        None => return,
-                        Some(r) => r,
-                    };
+        let mut is_rx_tx = false;
+        let mut is_abort = false;
 
-                    // All bytes have been transmitted
-                    if rem == 0 {
-                        // Signal client write done
-                        // disable uart here
-                        self.uart_state.replace(UartState::RxTx(power_on));
-                        self.tx_client.map(|client| {
-                            self.tx_buffer.take().map(|tx_buffer| {
-                                client.transmitted_buffer(tx_buffer, self.tx_len.get(), Ok(()));
-                            });
-                        });
-                    } else {
-                        // Not all bytes have been transmitted then update offset and continue transmitting
-                        self.offset.set(self.offset.get() + tx_bytes);
-                        self.tx_remaining_bytes.set(rem);
-                        power_on = self.set_tx_dma_pointer_to_buffer(power_on);
-                        power_on = self.registers.txd_maxcnt.write(
-                            Counter::COUNTER.val(min(rem as u32, UARTE_MAX_BUFFER_SIZE)),
-                            power_on,
-                        );
-
-                        power_on = self
-                            .registers
-                            .task_starttx
-                            .write(Task::ENABLE::SET, power_on);
-                        power_on = self.enable_tx_interrupts(power_on);
-                        self.uart_state.replace(UartState::RxTx(power_on));
-                    }
-
-                    return;
-                }
-
-                if self.rx_ready() {
-                    power_on = self.disable_rx_interrupts(power_on);
-
-                    // Clear the ENDRX event
-                    power_on = self
-                        .registers
-                        .event_endrx
-                        .write(Event::READY::CLEAR, power_on);
-
-                    // Get the number of bytes in the buffer that was received this time
-                    let rx_bytes = self.registers.rxd_amount.get() as usize;
-
-                    // In the normal case, we need to either pass call the callback
-                    // or do another read to get more bytes.
-
-                    // Update how many bytes we still need to receive and
-                    // where we are storing in the buffer.
-                    self.rx_remaining_bytes
-                        .set(self.rx_remaining_bytes.get().saturating_sub(rx_bytes));
-                    self.offset.set(self.offset.get() + rx_bytes);
-
-                    let rem = self.rx_remaining_bytes.get();
-                    if rem == 0 {
-                        disable |= true;
-                        self.disable_uart(power_on);
-                        // Signal client that the read is done
-                        self.rx_client.map(|client| {
-                            self.rx_buffer.take().map(|rx_buffer| {
-                                client.received_buffer(
-                                    rx_buffer,
-                                    self.offset.get(),
-                                    Ok(()),
-                                    uart::Error::None,
-                                );
-                            });
-                        });
-                    } else {
-                        // Setup how much we can read. We already made sure that
-                        // this will fit in the buffer.
-                        let to_read = core::cmp::min(rem, 255);
-                        power_on = self
-                            .registers
-                            .rxd_maxcnt
-                            .write(Counter::COUNTER.val(to_read as u32), power_on);
-
-                        // Actually do the receive.
-                        power_on = self.set_rx_dma_pointer_to_buffer(power_on);
-                        power_on = self
-                            .registers
-                            .task_startrx
-                            .write(Task::ENABLE::SET, power_on);
-                        power_on = self.enable_rx_interrupts(power_on);
-                        self.uart_state.replace(UartState::RxTx(power_on));
-                    }
-                }
+        let state = self.uart_state.take().unwrap();
+        let mut power_on = match state {
+            UartState::RxTx(power_on) => {
+                is_rx_tx = true;
+                power_on
+            }
+            UartState::Rx(power_on) => power_on,
+            UartState::Tx(power_on) => power_on,
+            UartState::Disabled(_) => {
+                // If we get an interrupt when the UART is in the disabled state,
+                // the state machine has diverged.
+                panic!("[UART] State machine diverged.");
             }
             UartState::Aborting(power_on) => {
-                if self.rx_ready() {
-                    let mut power_on = self.disable_rx_interrupts(power_on);
-
-                    // Clear the ENDRX event
-                    power_on = self
-                        .registers
-                        .event_endrx
-                        .write(Event::READY::CLEAR, power_on);
-
-                    // Get the number of bytes in the buffer that was received this time
-                    let rx_bytes = self.registers.rxd_amount.get() as usize;
-
-                    // Check if this ENDRX is due to an abort. If so, we want to
-                    // do the receive callback immediately.
-                    self.uart_state.replace(UartState::Idle);
-                    self.rx_client.map(|client| {
-                        self.uart_state.replace(UartState::Idle);
-                        self.rx_buffer.take().map(|rx_buffer| {
-                            client.received_buffer(
-                                rx_buffer,
-                                self.offset.get() + rx_bytes,
-                                Err(ErrorCode::CANCEL),
-                                uart::Error::None,
-                            );
-                        });
-                    });
-                }
+                is_abort = true;
+                power_on
             }
-            any => {
-                self.uart_state.replace(any);
+        };
+
+        if self.tx_ready() {
+            power_on = self.disable_tx_interrupts(power_on);
+            power_on = self
+                .registers
+                .event_endtx
+                .write(Event::READY::CLEAR, power_on);
+            let tx_bytes = self.registers.txd_amount.get() as usize;
+
+            let rem = match self.tx_remaining_bytes.get().checked_sub(tx_bytes) {
+                None => return,
+                Some(r) => r,
+            };
+
+            // All bytes have been transmitted
+            if rem == 0 {
+                // Signal client write done
+                // disable uart here if there is not a rx
+                if !is_rx_tx {
+                    self.disable_uart(power_on);
+                }
+
+                self.tx_client.map(|client| {
+                    self.tx_buffer.take().map(|tx_buffer| {
+                        client.transmitted_buffer(tx_buffer, self.tx_len.get(), Ok(()));
+                    });
+                });
+            } else {
+                // Not all bytes have been transmitted then update offset and continue transmitting
+                self.offset.set(self.offset.get() + tx_bytes);
+                self.tx_remaining_bytes.set(rem);
+                power_on = self.set_tx_dma_pointer_to_buffer(power_on);
+                power_on = self.registers.txd_maxcnt.write(
+                    Counter::COUNTER.val(min(rem as u32, UARTE_MAX_BUFFER_SIZE)),
+                    power_on,
+                );
+
+                power_on = self
+                    .registers
+                    .task_starttx
+                    .write(Task::ENABLE::SET, power_on);
+                power_on = self.enable_tx_interrupts(power_on);
+                self.uart_state.replace(UartState::RxTx(power_on));
+            }
+
+            return;
+        }
+
+        if self.rx_ready() {
+            power_on = self.disable_rx_interrupts(power_on);
+
+            // Clear the ENDRX event
+            power_on = self
+                .registers
+                .event_endrx
+                .write(Event::READY::CLEAR, power_on);
+
+            // Get the number of bytes in the buffer that was received this time
+            let rx_bytes = self.registers.rxd_amount.get() as usize;
+
+            // Check if this ENDRX is due to an abort. If so, we want to
+            // do the receive callback immediately and disable the peripheral.
+            if is_abort {
+                self.disable_uart(power_on);
+                self.rx_client.map(|client| {
+                    self.rx_buffer.take().map(|rx_buffer| {
+                        client.received_buffer(
+                            rx_buffer,
+                            self.offset.get() + rx_bytes,
+                            Err(ErrorCode::CANCEL),
+                            uart::Error::None,
+                        );
+                    });
+                });
+                return;
+            }
+
+            // In the normal case, we need to either pass call the callback
+            // or do another read to get more bytes.
+
+            // Update how many bytes we still need to receive and
+            // where we are storing in the buffer.
+            self.rx_remaining_bytes
+                .set(self.rx_remaining_bytes.get().saturating_sub(rx_bytes));
+            self.offset.set(self.offset.get() + rx_bytes);
+
+            let rem = self.rx_remaining_bytes.get();
+            if rem == 0 {
+                if !is_rx_tx {
+                    self.disable_uart(power_on);
+                }
+                // Signal client that the read is done
+                self.rx_client.map(|client| {
+                    self.rx_buffer.take().map(|rx_buffer| {
+                        client.received_buffer(
+                            rx_buffer,
+                            self.offset.get(),
+                            Ok(()),
+                            uart::Error::None,
+                        );
+                    });
+                });
+            } else {
+                // Setup how much we can read. We already made sure that
+                // this will fit in the buffer.
+                let to_read = core::cmp::min(rem, 255);
+                power_on = self
+                    .registers
+                    .rxd_maxcnt
+                    .write(Counter::COUNTER.val(to_read as u32), power_on);
+
+                // Actually do the receive.
+                power_on = self.set_rx_dma_pointer_to_buffer(power_on);
+                power_on = self
+                    .registers
+                    .task_startrx
+                    .write(Task::ENABLE::SET, power_on);
+                power_on = self.enable_rx_interrupts(power_on);
+                self.uart_state.replace(UartState::RxTx(power_on));
             }
         }
     }
@@ -686,12 +701,13 @@ impl<'a> uart::Receive<'a> for Uarte<'a> {
 
         let mut power_on = match self.uart_state.take().unwrap() {
             UartState::RxTx(power_on) => power_on,
+            UartState::Rx(power_on) => power_on,
+            UartState::Tx(power_on) => power_on,
             UartState::Disabled(power_off) => {
                 let power_on = self.registers.enable.power_on(power_off, Uart::ENABLE::ON);
                 power_on
             }
             UartState::Aborting(_) => panic!("receive buffer panic -- abort"),
-            UartState::Idle => panic!("receive buffer panic -- idle"),
         };
 
         power_on = self.set_rx_dma_pointer_to_buffer(power_on);
