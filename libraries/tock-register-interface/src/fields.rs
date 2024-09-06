@@ -203,6 +203,12 @@ pub struct FieldValue<T: UIntLike, R: RegisterLongName> {
     associated_register: PhantomData<R>,
 }
 
+pub struct PowerFieldValue<T: UIntLike, R: RegisterLongName, const POWER: usize> {
+    mask: T,
+    pub value: T,
+    associated_register: PhantomData<R>,
+}
+
 macro_rules! FieldValue_impl_for {
     ($type:ty) => {
         // Necessary to split the implementation of new() out because the bitwise
@@ -211,6 +217,16 @@ macro_rules! FieldValue_impl_for {
         impl<R: RegisterLongName> FieldValue<$type, R> {
             pub const fn new(mask: $type, shift: usize, value: $type) -> Self {
                 FieldValue {
+                    mask: mask << shift,
+                    value: (value & mask) << shift,
+                    associated_register: PhantomData,
+                }
+            }
+        }
+
+        impl<R: RegisterLongName, const POWER: usize> PowerFieldValue<$type, R, POWER> {
+            pub const fn new(mask: $type, shift: usize, value: $type) -> Self {
+                PowerFieldValue {
                     mask: mask << shift,
                     value: (value & mask) << shift,
                     associated_register: PhantomData,
@@ -370,6 +386,82 @@ macro_rules! register_bitmasks {
         $crate::register_bitmasks!(@debug $valtype, $reg_mod, $reg_desc, [$($field),*]);
     };
 
+    // POWER ARM MATCH
+    {
+        $valtype:ident, $reg_desc:ident, $(#[$outer:meta])* $field:ident,
+                    $offset:expr, $numbits:expr,
+                    [$( $(#[$inner:meta])* $valname:ident = $value:expr; $power:expr),+ $(,)?]
+    } => { // this match arm is duplicated below with an allowance for 0 elements in the valname -> value array,
+        // to seperately support the case of zero-variant enums not supporting non-default
+        // representations.
+        #[allow(non_upper_case_globals)]
+        #[allow(unused)]
+        pub const $field: Field<$valtype, $reg_desc> =
+            Field::<$valtype, $reg_desc>::new($crate::bitmask!($numbits), $offset);
+
+        #[allow(non_snake_case)]
+        #[allow(unused)]
+        $(#[$outer])*
+        pub mod $field {
+            #[allow(unused_imports)]
+            use $crate::fields::{TryFromValue, FieldValue, PowerFieldValue};
+            use super::$reg_desc;
+
+            $(
+            #[allow(non_upper_case_globals)]
+            #[allow(unused)]
+            $(#[$inner])*
+            pub const $valname: PowerFieldValue<$valtype, $reg_desc, $power> =
+                PowerFieldValue::<$valtype, $reg_desc, $power>::new($crate::bitmask!($numbits),
+                    $offset, $value);
+            )*
+
+            #[allow(non_upper_case_globals)]
+            #[allow(unused)]
+            pub const SET: FieldValue<$valtype, $reg_desc> =
+                FieldValue::<$valtype, $reg_desc>::new($crate::bitmask!($numbits),
+                    $offset, $crate::bitmask!($numbits));
+
+            #[allow(non_upper_case_globals)]
+            #[allow(unused)]
+            pub const CLEAR: FieldValue<$valtype, $reg_desc> =
+                FieldValue::<$valtype, $reg_desc>::new($crate::bitmask!($numbits),
+                    $offset, 0);
+
+            #[allow(dead_code)]
+            #[allow(non_camel_case_types)]
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            #[repr($valtype)] // so that values larger than isize::MAX can be stored
+            $(#[$outer])*
+            pub enum Value {
+                $(
+                    $(#[$inner])*
+                    $valname = $value,
+                )*
+            }
+
+            impl TryFromValue<$valtype> for Value {
+                type EnumType = Value;
+
+                fn try_from_value(v: $valtype) -> Option<Self::EnumType> {
+                    match v {
+                        $(
+                            $(#[$inner])*
+                            x if x == Value::$valname as $valtype => Some(Value::$valname),
+                        )*
+
+                        _ => Option::None
+                    }
+                }
+            }
+
+            impl From<Value> for FieldValue<$valtype, $reg_desc> {
+                fn from(v: Value) -> Self {
+                    Self::new($crate::bitmask!($numbits), $offset, v as $valtype)
+                }
+            }
+        }
+    };
     {
         $valtype:ident, $reg_desc:ident, $(#[$outer:meta])* $field:ident,
                     $offset:expr, $numbits:expr,

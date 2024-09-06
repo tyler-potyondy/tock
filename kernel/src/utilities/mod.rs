@@ -20,12 +20,12 @@ pub use self::static_ref::StaticRef;
 
 /// Re-export the tock-register-interface library.
 pub mod registers {
-    pub use tock_registers::fields::{Field, FieldValue};
+    pub use tock_registers::fields::{Field, FieldValue, PowerFieldValue};
     pub use tock_registers::interfaces;
     pub use tock_registers::registers::InMemoryRegister;
     pub use tock_registers::registers::{Aliased, ReadOnly, ReadWrite, WriteOnly};
     pub use tock_registers::{register_bitfields, register_structs};
-    pub use tock_registers::{LocalRegisterCopy, RegisterLongName};
+    pub use tock_registers::{LocalRegisterCopy, Peripheral, Power, RegisterLongName};
 }
 
 /// Create a "fake" module inside of `common` for all of the Tock `Cell` types.

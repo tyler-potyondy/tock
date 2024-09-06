@@ -23,7 +23,7 @@
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 
-use crate::interfaces::{Readable, Writeable};
+use crate::interfaces::{Readable, TockRegister, Writeable};
 use crate::{RegisterLongName, UIntLike};
 
 /// Read/Write registers.

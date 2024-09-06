@@ -161,8 +161,10 @@
 //! assert!(dummy.read(DummyReg::HIGH) == 0xb);
 //! ```
 
-use crate::fields::{Field, FieldValue, TryFromValue};
-use crate::{LocalRegisterCopy, RegisterLongName, UIntLike};
+use crate::fields::{Field, FieldValue, PowerFieldValue, TryFromValue};
+use crate::{LocalRegisterCopy, Peripheral, Power, RegisterLongName, UIntLike};
+
+pub trait TockRegister {}
 
 /// Readable register
 ///
@@ -311,6 +313,12 @@ impl<T: Readable> Debuggable for T {}
 pub trait Writeable {
     type T: UIntLike;
     type R: RegisterLongName;
+
+    fn power_write<const P: usize>(&self, field: PowerFieldValue<Self::T, Self::R, P>) -> usize {
+        // update powermanager struct here (how??)
+        self.set(field.value);
+        P
+    }
 
     /// Set the raw register value
     fn set(&self, value: Self::T);

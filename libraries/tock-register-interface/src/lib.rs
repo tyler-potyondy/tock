@@ -65,7 +65,7 @@
 pub mod fields;
 pub mod interfaces;
 pub mod macros;
-
+pub mod power;
 #[cfg(feature = "register_types")]
 pub mod registers;
 
@@ -75,6 +75,7 @@ mod local_register;
 pub use local_register::LocalRegisterCopy;
 
 use core::fmt::Debug;
+use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
 
 /// Trait representing the base type of registers.
@@ -134,3 +135,12 @@ pub trait RegisterLongName {}
 // Useful implementation for when no RegisterLongName is required
 // (e.g. no fields need to be accessed, just the raw register values)
 impl RegisterLongName for () {}
+
+pub trait Peripheral {}
+pub struct Power<const POWER: usize> {}
+
+impl<const POWER: usize> Power<POWER> {
+    pub const fn new() -> Self {
+        Power {}
+    }
+}

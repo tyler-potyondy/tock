@@ -15,7 +15,9 @@ use core::cmp::min;
 use kernel::hil::uart;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
-use kernel::utilities::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
+use kernel::utilities::registers::{
+    register_bitfields, Peripheral, Power, ReadOnly, ReadWrite, WriteOnly,
+};
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
 use nrf5x::pinmux;
@@ -27,6 +29,7 @@ static mut BYTE: u8 = 0;
 pub const UARTE0_BASE: StaticRef<UarteRegisters> =
     unsafe { StaticRef::new(0x40002000 as *const UarteRegisters) };
 
+// PowerReg::new(WriteOnly<u32, Task::Register>)
 #[repr(C)]
 pub struct UarteRegisters {
     task_startrx: WriteOnly<u32, Task::Register>,
@@ -78,6 +81,8 @@ pub struct UarteRegisters {
     config: ReadWrite<u32, Config::Register>,
 }
 
+impl Peripheral for UarteRegisters {}
+
 register_bitfields! [u32,
     /// Start task
     Task [
@@ -121,8 +126,8 @@ register_bitfields! [u32,
     /// Enable UART
     Uart [
         ENABLE OFFSET(0) NUMBITS(4) [
-            ON = 8,
-            OFF = 0
+            ON = 8; 1200,
+            OFF = 0; 0,
         ]
     ],
 
@@ -263,12 +268,12 @@ impl<'a> Uarte<'a> {
 
     // Enable UART peripheral, this need to disabled for low power applications
     fn enable_uart(&self) {
-        self.registers.enable.write(Uart::ENABLE::ON);
+        self.registers.enable.power_write(Uart::ENABLE::ON);
     }
 
     #[allow(dead_code)]
     fn disable_uart(&self) {
-        self.registers.enable.write(Uart::ENABLE::OFF);
+        self.registers.enable.power_write(Uart::ENABLE::OFF);
     }
 
     fn enable_rx_interrupts(&self) {
