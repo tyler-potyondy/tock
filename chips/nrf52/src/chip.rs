@@ -4,7 +4,9 @@
 
 use core::fmt::Write;
 use cortexm4::{nvic, CortexM4, CortexMVariant};
-use kernel::platform::chip::InterruptService;
+use kernel::{platform::chip::InterruptService, utilities::registers::PowerManager};
+
+use crate::power;
 
 pub struct NRF52<'a, I: InterruptService + 'a> {
     mpu: cortexm4::mpu::MPU,
@@ -49,7 +51,7 @@ pub struct Nrf52DefaultPeripherals<'a> {
 }
 
 impl<'a> Nrf52DefaultPeripherals<'a> {
-    pub fn new() -> Self {
+    pub fn new(power_manager: &'static dyn PowerManager) -> Self {
         Self {
             acomp: crate::acomp::Comparator::new(),
             ecb: crate::aes::AesECB::new(),
@@ -61,7 +63,7 @@ impl<'a> Nrf52DefaultPeripherals<'a> {
             timer0: crate::timer::TimerAlarm::new(0),
             timer1: crate::timer::TimerAlarm::new(1),
             timer2: crate::timer::Timer::new(2),
-            uarte0: crate::uart::Uarte::new(crate::uart::UARTE0_BASE),
+            uarte0: crate::uart::Uarte::new(crate::uart::UARTE0_BASE, power_manager),
             spim0: crate::spi::SPIM::new(0),
             twi1: crate::i2c::TWI::new_twi1(),
             spim2: crate::spi::SPIM::new(2),

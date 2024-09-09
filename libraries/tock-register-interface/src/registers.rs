@@ -24,7 +24,7 @@ use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 
 use crate::interfaces::{Readable, TockRegister, Writeable};
-use crate::{RegisterLongName, UIntLike};
+use crate::{Peripheral, RegisterLongName, UIntLike};
 
 /// Read/Write registers.
 ///
@@ -43,11 +43,12 @@ use crate::{RegisterLongName, UIntLike};
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct ReadWrite<T: UIntLike, R: RegisterLongName = ()> {
+pub struct ReadWrite<T: UIntLike, R: RegisterLongName = (), P: Peripheral = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
+    associated_peripheral: PhantomData<P>,
 }
-impl<T: UIntLike, R: RegisterLongName> Readable for ReadWrite<T, R> {
+impl<T: UIntLike, R: RegisterLongName, P: Peripheral> Readable for ReadWrite<T, R, P> {
     type T = T;
     type R = R;
 
@@ -56,7 +57,7 @@ impl<T: UIntLike, R: RegisterLongName> Readable for ReadWrite<T, R> {
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName> Writeable for ReadWrite<T, R> {
+impl<T: UIntLike, R: RegisterLongName, P: Peripheral> Writeable for ReadWrite<T, R, P> {
     type T = T;
     type R = R;
 
@@ -110,11 +111,12 @@ impl<T: UIntLike, R: RegisterLongName> Readable for ReadOnly<T, R> {
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct WriteOnly<T: UIntLike, R: RegisterLongName = ()> {
+pub struct WriteOnly<T: UIntLike, R: RegisterLongName = (), P: Peripheral = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
+    associated_peripheral: PhantomData<P>,
 }
-impl<T: UIntLike, R: RegisterLongName> Writeable for WriteOnly<T, R> {
+impl<T: UIntLike, R: RegisterLongName, P: Peripheral> Writeable for WriteOnly<T, R, P> {
     type T = T;
     type R = R;
 
@@ -148,9 +150,15 @@ impl<T: UIntLike, R: RegisterLongName> Writeable for WriteOnly<T, R> {
 // be removed. We `allow(dead_code)` here to suppress this warning.
 #[allow(dead_code)]
 #[repr(transparent)]
-pub struct Aliased<T: UIntLike, R: RegisterLongName = (), W: RegisterLongName = ()> {
+pub struct Aliased<
+    T: UIntLike,
+    R: RegisterLongName = (),
+    W: RegisterLongName = (),
+    P: Peripheral = (),
+> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<(R, W)>,
+    associated_peripheral: PhantomData<P>,
 }
 impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Readable for Aliased<T, R, W> {
     type T = T;
@@ -161,7 +169,9 @@ impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Readable for Aliased
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Writeable for Aliased<T, R, W> {
+impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName, P: Peripheral> Writeable
+    for Aliased<T, R, W, P>
+{
     type T = T;
     type R = W;
 
@@ -184,9 +194,10 @@ impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Writeable for Aliase
 // To successfully alias this structure onto hardware registers in memory, this
 // struct must be exactly the size of the `T`.
 #[repr(transparent)]
-pub struct InMemoryRegister<T: UIntLike, R: RegisterLongName = ()> {
+pub struct InMemoryRegister<T: UIntLike, R: RegisterLongName = (), P: Peripheral = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
+    associated_peripheral: PhantomData<P>,
 }
 
 impl<T: UIntLike, R: RegisterLongName> InMemoryRegister<T, R> {
@@ -194,6 +205,7 @@ impl<T: UIntLike, R: RegisterLongName> InMemoryRegister<T, R> {
         InMemoryRegister {
             value: UnsafeCell::new(value),
             associated_register: PhantomData,
+            associated_peripheral: PhantomData,
         }
     }
 }
@@ -206,7 +218,7 @@ impl<T: UIntLike, R: RegisterLongName> Readable for InMemoryRegister<T, R> {
         unsafe { ::core::ptr::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName> Writeable for InMemoryRegister<T, R> {
+impl<T: UIntLike, R: RegisterLongName, P: Peripheral> Writeable for InMemoryRegister<T, R, P> {
     type T = T;
     type R = R;
 

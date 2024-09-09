@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2022.
 
-use kernel::hil::time::Alarm;
+use kernel::{hil::time::Alarm, utilities::registers::PowerManager};
 use nrf52::chip::Nrf52DefaultPeripherals;
 
 /// This struct, when initialized, instantiates all peripheral drivers for the nrf52840.
@@ -19,10 +19,11 @@ pub struct Nrf52840DefaultPeripherals<'a> {
 
 impl<'a> Nrf52840DefaultPeripherals<'a> {
     pub unsafe fn new(
+        power_manager: &'static dyn PowerManager,
         ieee802154_radio_ack_buf: &'static mut [u8; crate::ieee802154_radio::ACK_BUF_SIZE],
     ) -> Self {
         Self {
-            nrf52: Nrf52DefaultPeripherals::new(),
+            nrf52: Nrf52DefaultPeripherals::new(power_manager),
             ieee802154_radio: crate::ieee802154_radio::Radio::new(ieee802154_radio_ack_buf),
             usbd: crate::usbd::Usbd::new(),
             gpio_port: crate::gpio::nrf52840_gpio_create(),

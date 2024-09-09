@@ -44,23 +44,7 @@ impl IoWrite for Writer {
                 // Here, we create a second instance of the Uarte struct.
                 // This is okay because we only call this during a panic, and
                 // we will never actually process the interrupts
-                let uart = Uarte::new(UARTE0_BASE);
-                if !*initialized {
-                    *initialized = true;
-                    let _ = uart.configure(uart::Parameters {
-                        baud_rate: 115200,
-                        stop_bits: uart::StopBits::One,
-                        parity: uart::Parity::None,
-                        hw_flow_control: false,
-                        width: uart::Width::Eight,
-                    });
-                }
-                for &c in buf {
-                    unsafe {
-                        uart.send_byte(c);
-                    }
-                    while !uart.tx_ready() {}
-                }
+                unimplemented!()
             }
             Writer::WriterRtt(rtt_memory) => {
                 let up_buffer = unsafe { &*rtt_memory.get_up_buffer_ptr() };

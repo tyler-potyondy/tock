@@ -132,7 +132,7 @@ pub mod io;
 // Whether to use UART debugging or Segger RTT (USB) debugging.
 // - Set to false to use UART.
 // - Set to true to use Segger RTT over USB.
-const USB_DEBUGGING: bool = false;
+const USB_DEBUGGING: bool = true;
 
 /// This platform's chip type:
 pub type Chip = nrf52840::chip::NRF52<'static, Nrf52840DefaultPeripherals<'static>>;
@@ -416,16 +416,61 @@ pub unsafe fn start() -> (
         [u8; nrf52840::ieee802154_radio::ACK_BUF_SIZE],
         [0; nrf52840::ieee802154_radio::ACK_BUF_SIZE]
     );
+
+    let power_manager = static_init!(
+        nrf52840::power::PowerManagerObj,
+        nrf52840::power::PowerManagerObj::new()
+    );
     // Initialize chip peripheral drivers
     let nrf52840_peripherals = static_init!(
         Nrf52840DefaultPeripherals,
-        Nrf52840DefaultPeripherals::new(ieee802154_ack_buf)
+        Nrf52840DefaultPeripherals::new(power_manager, ieee802154_ack_buf)
     );
 
     // Set up circular peripheral dependencies.
     nrf52840_peripherals.init();
     let base_peripherals = &nrf52840_peripherals.nrf52;
 
+    let mut rtt_memory_refs = components::segger_rtt::SeggerRttMemoryComponent::new()
+        .finalize(components::segger_rtt_memory_component_static!());
+    // XXX: This is inherently unsafe as it aliases the mutable reference to
+    // rtt_memory. This aliases reference is only used inside a panic
+    // handler, which should be OK, but maybe we should use a const
+    // reference to rtt_memory and leverage interior mutability instead.
+    self::io::set_rtt_memory(&*rtt_memory_refs.get_rtt_memory_ptr());
+
+    // Setup space to store the core kernel data structure.
+    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
+    //--------------------------------------------------------------------------
+    // TIMER
+    //--------------------------------------------------------------------------
+
+    let rtc = &base_peripherals.rtc;
+    let _ = rtc.start();
+    let mux_alarm = components::alarm::AlarmMuxComponent::new(rtc)
+        .finalize(components::alarm_mux_component_static!(nrf52840::rtc::Rtc));
+    let alarm = components::alarm::AlarmDriverComponent::new(
+        board_kernel,
+        capsules_core::alarm::DRIVER_NUM,
+        mux_alarm,
+    )
+    .finalize(components::alarm_component_static!(nrf52840::rtc::Rtc));
+
+    let uart_channel_rtt = UartChannel::Rtt(rtt_memory_refs);
+    let uart_channel_rtt = nrf52_components::UartChannelComponent::new(
+        uart_channel_rtt,
+        mux_alarm,
+        &base_peripherals.uarte0,
+    )
+    .finalize(nrf52_components::uart_channel_component_static!(
+        nrf52840::rtc::Rtc
+    ));
+    let uart_mux_rtt = components::console::UartMuxComponent::new(uart_channel_rtt, 115200)
+        .finalize(components::uart_mux_component_static!());
+
+    // Create the debugger object that handles calls to `debug!()`.
+    components::debug_writer::DebugWriterComponent::new(uart_mux_rtt)
+        .finalize(components::debug_writer_component_static!());
     // Configure kernel debug GPIOs as early as possible.
     kernel::debug::assign_gpios(
         Some(&nrf52840_peripherals.gpio_port[LED1_PIN]),
@@ -436,25 +481,7 @@ pub unsafe fn start() -> (
     // Choose the channel for serial output. This board can be configured to use
     // either the Segger RTT channel or via UART with traditional TX/RX GPIO
     // pins.
-    let uart_channel = if USB_DEBUGGING {
-        // Initialize early so any panic beyond this point can use the RTT
-        // memory object.
-        let mut rtt_memory_refs = components::segger_rtt::SeggerRttMemoryComponent::new()
-            .finalize(components::segger_rtt_memory_component_static!());
-
-        // XXX: This is inherently unsafe as it aliases the mutable reference to
-        // rtt_memory. This aliases reference is only used inside a panic
-        // handler, which should be OK, but maybe we should use a const
-        // reference to rtt_memory and leverage interior mutability instead.
-        self::io::set_rtt_memory(&*rtt_memory_refs.get_rtt_memory_ptr());
-
-        UartChannel::Rtt(rtt_memory_refs)
-    } else {
-        UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD))
-    };
-
-    // Setup space to store the core kernel data structure.
-    let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
+    let uart_channel = UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD));
 
     // Create (and save for panic debugging) a chip object to setup low-level
     // resources (e.g. MPU, systick).
@@ -561,21 +588,6 @@ pub unsafe fn start() -> (
     ));
 
     //--------------------------------------------------------------------------
-    // TIMER
-    //--------------------------------------------------------------------------
-
-    let rtc = &base_peripherals.rtc;
-    let _ = rtc.start();
-    let mux_alarm = components::alarm::AlarmMuxComponent::new(rtc)
-        .finalize(components::alarm_mux_component_static!(nrf52840::rtc::Rtc));
-    let alarm = components::alarm::AlarmDriverComponent::new(
-        board_kernel,
-        capsules_core::alarm::DRIVER_NUM,
-        mux_alarm,
-    )
-    .finalize(components::alarm_component_static!(nrf52840::rtc::Rtc));
-
-    //--------------------------------------------------------------------------
     // UART & CONSOLE & DEBUG
     //--------------------------------------------------------------------------
 
@@ -617,10 +629,6 @@ pub unsafe fn start() -> (
         uart_mux,
     )
     .finalize(components::console_component_static!());
-
-    // Create the debugger object that handles calls to `debug!()`.
-    components::debug_writer::DebugWriterComponent::new(uart_mux)
-        .finalize(components::debug_writer_component_static!());
 
     //--------------------------------------------------------------------------
     // BLE

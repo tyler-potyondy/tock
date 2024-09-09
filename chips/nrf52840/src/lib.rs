@@ -5,8 +5,8 @@
 #![no_std]
 pub use nrf52::{
     acomp, adc, aes, ble_radio, chip, clock, constants, crt1, ficr, i2c, init, nvmc,
-    peripheral_interrupts as base_interrupts, pinmux, power, ppi, pwm, rtc, spi, temperature,
-    timer, trng, uart, uicr, usbd,
+    peripheral_interrupts as base_interrupts, pinmux, ppi, pwm, rtc, spi, temperature, timer, trng,
+    uart, uicr, usbd,
 };
 pub mod gpio;
 pub mod interrupt_service;
@@ -17,3 +17,5 @@ pub mod interrupt_service;
 pub mod ieee802154_radio;
 
 pub mod peripheral_interrupts;
+
+pub mod power;

@@ -78,7 +78,7 @@
 use core::marker::PhantomData;
 use core::ops::{Add, AddAssign};
 
-use crate::{RegisterLongName, UIntLike};
+use crate::{Peripheral, RegisterLongName, UIntLike};
 
 /// Specific section of a register.
 ///

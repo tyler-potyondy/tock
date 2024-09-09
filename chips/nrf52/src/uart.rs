@@ -16,7 +16,7 @@ use kernel::hil::uart;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{
-    register_bitfields, Peripheral, Power, ReadOnly, ReadWrite, WriteOnly,
+    register_bitfields, Peripheral, Power, PowerManager, ReadOnly, ReadWrite, WriteOnly,
 };
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
@@ -26,8 +26,9 @@ const UARTE_MAX_BUFFER_SIZE: u32 = 0xff;
 
 static mut BYTE: u8 = 0;
 
+pub const UARTE0_BASE_ADDR: u32 = 0x40002000;
 pub const UARTE0_BASE: StaticRef<UarteRegisters> =
-    unsafe { StaticRef::new(0x40002000 as *const UarteRegisters) };
+    unsafe { StaticRef::new(UARTE0_BASE_ADDR as *const UarteRegisters) };
 
 // PowerReg::new(WriteOnly<u32, Task::Register>)
 #[repr(C)]
@@ -61,7 +62,7 @@ pub struct UarteRegisters {
     _reserved11: [u32; 93],
     errorsrc: ReadWrite<u32, ErrorSrc::Register>,
     _reserved12: [u32; 31],
-    enable: ReadWrite<u32, Uart::Register>,
+    enable: ReadWrite<u32, Uart::Register, Self>,
     _reserved13: [u32; 1],
     pselrts: ReadWrite<u32, Psel::Register>,
     pseltxd: ReadWrite<u32, Psel::Register>,
@@ -178,6 +179,7 @@ pub struct Uarte<'a> {
     rx_remaining_bytes: Cell<usize>,
     rx_abort_in_progress: Cell<bool>,
     offset: Cell<usize>,
+    power_manager: &'static dyn PowerManager,
 }
 
 #[derive(Copy, Clone)]
@@ -188,7 +190,10 @@ pub struct UARTParams {
 impl<'a> Uarte<'a> {
     /// Constructor
     // This should only be constructed once
-    pub const fn new(regs: StaticRef<UarteRegisters>) -> Uarte<'a> {
+    pub const fn new(
+        regs: StaticRef<UarteRegisters>,
+        power_manager: &'static dyn PowerManager,
+    ) -> Uarte<'a> {
         Uarte {
             registers: regs,
             tx_client: OptionalCell::empty(),
@@ -200,6 +205,7 @@ impl<'a> Uarte<'a> {
             rx_remaining_bytes: Cell::new(0),
             rx_abort_in_progress: Cell::new(false),
             offset: Cell::new(0),
+            power_manager: power_manager,
         }
     }
 
@@ -268,12 +274,16 @@ impl<'a> Uarte<'a> {
 
     // Enable UART peripheral, this need to disabled for low power applications
     fn enable_uart(&self) {
-        self.registers.enable.power_write(Uart::ENABLE::ON);
+        self.registers
+            .enable
+            .power_write(Uart::ENABLE::ON, self.power_manager);
     }
 
     #[allow(dead_code)]
     fn disable_uart(&self) {
-        self.registers.enable.power_write(Uart::ENABLE::OFF);
+        self.registers
+            .enable
+            .power_write(Uart::ENABLE::OFF, self.power_manager);
     }
 
     fn enable_rx_interrupts(&self) {

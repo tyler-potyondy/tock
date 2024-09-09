@@ -65,7 +65,6 @@
 pub mod fields;
 pub mod interfaces;
 pub mod macros;
-pub mod power;
 #[cfg(feature = "register_types")]
 pub mod registers;
 
@@ -77,6 +76,8 @@ pub use local_register::LocalRegisterCopy;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
+
+use fields::PowerFieldValue;
 
 /// Trait representing the base type of registers.
 ///
@@ -108,6 +109,8 @@ pub trait UIntLike:
     /// the largest representable value, use a bitwise negation: `~(<T
     /// as UIntLike>::zero())`.
     fn zero() -> Self;
+
+    fn to_u32(&self) -> u32;
 }
 
 // Helper macro for implementing the UIntLike trait on differrent
@@ -117,6 +120,9 @@ macro_rules! UIntLike_impl_for {
         impl UIntLike for $type {
             fn zero() -> Self {
                 0
+            }
+            fn to_u32(&self) -> u32 {
+                *self as u32
             }
         }
     };
@@ -137,10 +143,20 @@ pub trait RegisterLongName {}
 impl RegisterLongName for () {}
 
 pub trait Peripheral {}
+
+impl Peripheral for () {}
 pub struct Power<const POWER: usize> {}
 
 impl<const POWER: usize> Power<POWER> {
     pub const fn new() -> Self {
         Power {}
     }
+}
+
+pub trait PowerManager {
+    fn update(&self, addr: u32, power: usize) {}
+    // fn update_power<T: UIntLike, R: RegisterLongName, const P: usize>(
+    //     &self,
+    //     field: PowerFieldValue<T, R, P>,
+    // );
 }
