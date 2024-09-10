@@ -162,7 +162,7 @@
 //! ```
 
 use crate::fields::{Field, FieldValue, PowerFieldValue, TryFromValue};
-use crate::{LocalRegisterCopy, Peripheral, Power, PowerManager, RegisterLongName, UIntLike};
+use crate::{LocalRegisterCopy, Peripheral, PowerManager, PowerOn, RegisterLongName, UIntLike};
 
 pub trait TockRegister {}
 
@@ -318,10 +318,12 @@ pub trait Writeable {
         &self,
         field: PowerFieldValue<Self::T, Self::R, POWER>,
         pm: &dyn PowerManager,
-    ) {
+    ) -> PowerOn {
         // update powermanager struct here (how??)
         self.set(field.value);
-        pm.update(field.value.to_u32(), POWER);
+        let addr = self as *const Self as *const u32 as u32;
+        pm.update(addr, POWER);
+        PowerOn::new()
     }
 
     /// Set the raw register value

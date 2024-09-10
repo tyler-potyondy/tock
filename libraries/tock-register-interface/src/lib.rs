@@ -73,7 +73,7 @@ pub mod debug;
 mod local_register;
 pub use local_register::LocalRegisterCopy;
 
-use core::fmt::Debug;
+use core::fmt::{self, Arguments, Debug, Display};
 use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
 
@@ -145,16 +145,22 @@ impl RegisterLongName for () {}
 pub trait Peripheral {}
 
 impl Peripheral for () {}
-pub struct Power<const POWER: usize> {}
+pub struct PowerOn {}
 
-impl<const POWER: usize> Power<POWER> {
+impl PowerOn {
     pub const fn new() -> Self {
-        Power {}
+        PowerOn {}
     }
 }
 
-pub trait PowerManager {
-    fn update(&self, addr: u32, power: usize) {}
+impl Drop for PowerOn {
+    fn drop(&mut self) {
+        panic!("Dropped :(");
+    }
+}
+
+pub trait PowerManager: fmt::Debug {
+    fn update(&self, addr: u32, power: usize);
     // fn update_power<T: UIntLike, R: RegisterLongName, const P: usize>(
     //     &self,
     //     field: PowerFieldValue<T, R, P>,

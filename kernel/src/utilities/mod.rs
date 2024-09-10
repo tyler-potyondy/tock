@@ -26,7 +26,7 @@ pub mod registers {
     pub use tock_registers::registers::{Aliased, ReadOnly, ReadWrite, WriteOnly};
     pub use tock_registers::{register_bitfields, register_structs};
     pub use tock_registers::{
-        LocalRegisterCopy, Peripheral, Power, PowerManager, RegisterLongName,
+        LocalRegisterCopy, Peripheral, PowerManager, PowerOn, RegisterLongName,
     };
 }
 

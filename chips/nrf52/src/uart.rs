@@ -16,7 +16,7 @@ use kernel::hil::uart;
 use kernel::utilities::cells::OptionalCell;
 use kernel::utilities::registers::interfaces::{Readable, Writeable};
 use kernel::utilities::registers::{
-    register_bitfields, Peripheral, Power, PowerManager, ReadOnly, ReadWrite, WriteOnly,
+    register_bitfields, Peripheral, PowerManager, PowerOn, ReadOnly, ReadWrite, WriteOnly,
 };
 use kernel::utilities::StaticRef;
 use kernel::ErrorCode;
@@ -180,6 +180,7 @@ pub struct Uarte<'a> {
     rx_abort_in_progress: Cell<bool>,
     offset: Cell<usize>,
     power_manager: &'static dyn PowerManager,
+    power_on: OptionalCell<PowerOn>,
 }
 
 #[derive(Copy, Clone)]
@@ -206,6 +207,7 @@ impl<'a> Uarte<'a> {
             rx_abort_in_progress: Cell::new(false),
             offset: Cell::new(0),
             power_manager: power_manager,
+            power_on: OptionalCell::empty(),
         }
     }
 
@@ -274,13 +276,16 @@ impl<'a> Uarte<'a> {
 
     // Enable UART peripheral, this need to disabled for low power applications
     fn enable_uart(&self) {
-        self.registers
+        let power = self
+            .registers
             .enable
             .power_write(Uart::ENABLE::ON, self.power_manager);
+        self.power_on.replace(power);
     }
 
     #[allow(dead_code)]
     fn disable_uart(&self) {
+        self.power_on.take();
         self.registers
             .enable
             .power_write(Uart::ENABLE::OFF, self.power_manager);

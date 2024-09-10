@@ -27,6 +27,7 @@ use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::time::Alarm;
 use kernel::process::ProcessPrinter;
+use kernel::utilities::registers::PowerManager;
 
 #[macro_export]
 macro_rules! process_console_component_static {
@@ -71,6 +72,7 @@ pub struct ProcessConsoleComponent<const COMMAND_HISTORY_LEN: usize, A: 'static 
     alarm_mux: &'static MuxAlarm<'static, A>,
     process_printer: &'static dyn ProcessPrinter,
     reset_function: Option<fn() -> !>,
+    power_manager: &'static dyn PowerManager,
 }
 
 impl<const COMMAND_HISTORY_LEN: usize, A: 'static + Alarm<'static>>
@@ -82,6 +84,7 @@ impl<const COMMAND_HISTORY_LEN: usize, A: 'static + Alarm<'static>>
         alarm_mux: &'static MuxAlarm<'static, A>,
         process_printer: &'static dyn ProcessPrinter,
         reset_function: Option<fn() -> !>,
+        power_manager: &'static dyn PowerManager,
     ) -> ProcessConsoleComponent<COMMAND_HISTORY_LEN, A> {
         ProcessConsoleComponent {
             board_kernel,
@@ -89,6 +92,7 @@ impl<const COMMAND_HISTORY_LEN: usize, A: 'static + Alarm<'static>>
             alarm_mux,
             process_printer,
             reset_function,
+            power_manager,
         }
     }
 }
@@ -186,6 +190,7 @@ impl<const COMMAND_HISTORY_LEN: usize, A: 'static + Alarm<'static>> Component
             self.board_kernel,
             kernel_addresses,
             self.reset_function,
+            self.power_manager,
             Capability,
         ));
         hil::uart::Transmit::set_transmit_client(console_uart, console);

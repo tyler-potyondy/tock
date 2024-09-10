@@ -76,8 +76,9 @@ use kernel::ErrorCode;
 
 use nrf52::constants::TxPower;
 
+pub const RADIO_BASE_ADDR: u32 = 0x40001000;
 const RADIO_BASE: StaticRef<RadioRegisters> =
-    unsafe { StaticRef::new(0x40001000 as *const RadioRegisters) };
+    unsafe { StaticRef::new(RADIO_BASE_ADDR as *const RadioRegisters) };
 
 const ACK_FLAG: u8 = 0b00100000;
 

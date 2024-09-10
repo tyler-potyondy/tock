@@ -617,6 +617,7 @@ pub unsafe fn start() -> (
         mux_alarm,
         process_printer,
         Some(cortexm4::support::reset),
+        power_manager,
     )
     .finalize(components::process_console_component_static!(
         nrf52840::rtc::Rtc<'static>

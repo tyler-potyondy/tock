@@ -10,11 +10,13 @@ use core::cell::Cell;
 use core::cmp;
 use core::fmt;
 use core::fmt::write;
+use core::fmt::Pointer;
 use core::str;
 use kernel::capabilities::ProcessManagementCapability;
 use kernel::hil::time::ConvertTicks;
 use kernel::utilities::cells::MapCell;
 use kernel::utilities::cells::TakeCell;
+use kernel::utilities::registers::PowerManager;
 use kernel::ProcessId;
 
 use kernel::debug;
@@ -25,6 +27,8 @@ use kernel::process::{ProcessPrinter, ProcessPrinterContext, State};
 use kernel::utilities::binary_write::BinaryWrite;
 use kernel::ErrorCode;
 use kernel::Kernel;
+
+use crate::console;
 
 /// Buffer to hold outgoing data that is passed to the UART hardware.
 pub const WRITE_BUF_LEN: usize = 500;
@@ -269,6 +273,9 @@ pub struct ProcessConsole<
     /// Function used to reset the device in bootloader mode
     reset_function: Option<fn() -> !>,
 
+    /// Power manager for the console
+    power_manager: &'static dyn PowerManager,
+
     /// This capsule needs to use potentially dangerous APIs related to
     /// processes, and requires a capability to access those APIs.
     capability: C,
@@ -398,6 +405,7 @@ impl<'a, const COMMAND_HISTORY_LEN: usize> CommandHistory<'a, COMMAND_HISTORY_LE
     }
 }
 
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub struct ConsoleWriter {
     buf: [u8; 500],
     size: usize,
@@ -448,6 +456,7 @@ impl<'a, const COMMAND_HISTORY_LEN: usize, A: Alarm<'a>, C: ProcessManagementCap
         kernel: &'static Kernel,
         kernel_addresses: KernelAddresses,
         reset_function: Option<fn() -> !>,
+        power_manager: &'static dyn PowerManager,
         capability: C,
     ) -> ProcessConsole<'a, COMMAND_HISTORY_LEN, A, C> {
         ProcessConsole {
@@ -471,6 +480,7 @@ impl<'a, const COMMAND_HISTORY_LEN: usize, A: Alarm<'a>, C: ProcessManagementCap
             kernel,
             kernel_addresses,
             reset_function,
+            power_manager: power_manager,
             capability,
         }
     }
@@ -996,6 +1006,14 @@ impl<'a, const COMMAND_HISTORY_LEN: usize, A: Alarm<'a>, C: ProcessManagementCap
                             );
                         } else if clean_str.starts_with("panic") {
                             panic!("Process Console forced a kernel panic.");
+                        } else if clean_str.starts_with("powerdump") {
+                            let mut console_writer = ConsoleWriter::new();
+                            let _ = write(
+                                &mut console_writer,
+                                format_args!("[POWER DUMP]\r\n {:?}", self.power_manager),
+                            );
+
+                            let _ = self.write_bytes(&(console_writer.buf)[..console_writer.size]);
                         } else {
                             let _ = self.write_bytes(b"Valid commands are: ");
                             let _ = self.write_bytes(VALID_COMMANDS_STR);
