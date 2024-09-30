@@ -23,7 +23,13 @@ Verify the rtc of nrf5x:
  verus chips/nrf5x/src/rtc.rs -L dependency=target/debug/deps --extern=kernel=target/debug/libkernel.rlib --extern=enum_primitive=target/debug/libenum_primitive.rlib --crate-type=lib --import kernel=kernel.vir
 ```
 
+Verify the virtual alarm capsule:
+
+```bash
+ ~/verus/source/target-verus/release/verus capsules/core/src/lib.rs -L dependency=target/debug/deps --extern=kernel=target/debug/libkernel.rlib --extern=enum_primitive=target/debug/libenum_primitive.rlib --crate-type=lib --import kernel=./kernel.vir --no-lifetime
 ```
+
+If you encounter an error due to lifetime issues, you can use the `--no-lifetime` flag to ignore them.
 
 [![tock-ci](https://github.com/tock/tock/workflows/tock-ci/badge.svg)][tock-ci]
 [![slack](https://img.shields.io/badge/slack-tockos-informational)][slack]
@@ -43,7 +49,7 @@ kernel.
 
 [tock-ci]: https://github.com/tock/tock/actions?query=branch%3Amaster+workflow%3Atock-ci
 
-TockWorld 2024!
+TockWorld 2024
 ---------------
 
 Join the community of industry professionals, operating system developers,
@@ -53,7 +59,7 @@ conference][TockWorld7]. This event in San Diego, CA will take place June 26-28,
 
 [TockWorld7]: https://world.tockos.org/
 
-Tock 2.x!
+Tock 2.x
 ---------
 
 Tock is now on its second major release! Tock 2.x includes significant changes
@@ -67,7 +73,6 @@ from Tock 1.x, including:
 For a summary of the latest new features and improvements, check out the
 [changelog](CHANGELOG.md).
 
-
 Learn More
 ----------
 
@@ -78,7 +83,6 @@ How would you like to get started?
 Tock is documented in the [Tock Book][tock-book]. Read through the guides there
 to learn about the overview and design of Tock, its implementation, and much
 more.
-
 
 ### Use Tock
 
@@ -99,7 +103,6 @@ Find example applications that run on top of the Tock kernel written in both
 [Rust](https://github.com/tock/libtock-rs) and
 [C](https://github.com/tock/libtock-c).
 
-
 ### Develop Tock
 
 Read our [getting started guide](doc/Getting_Started.md) to get the correct
@@ -112,7 +115,6 @@ for anything from small documentation fixes to whole new platforms. For details,
 check out our [Contributing Guide](.github/CONTRIBUTING.md). To get started,
 please do not hesitate to submit a PR. We'll happily guide you through any
 needed changes.
-
 
 ### Keep Up To Date
 
@@ -141,13 +143,12 @@ chats, and meetup events. For moderation issues, please contact members of the
 
 [coc]: https://www.rust-lang.org/conduct.html
 
-
 Cite this Project
 -----------------
 
 <h4>Tock was presented at SOSP'17</h4>
 
-Amit Levy, Bradford Campbell, Branden Ghena, Daniel B. Giffin, Pat Pannuto, Prabal Dutta, and Philip Levis. 2017. Multiprogramming a 64kB Computer Safely and Efficiently. In Proceedings of the 26th Symposium on Operating Systems Principles (SOSP ’17). Association for Computing Machinery, New York, NY, USA, 234–251. DOI: https://doi.org/10.1145/3132747.3132786
+Amit Levy, Bradford Campbell, Branden Ghena, Daniel B. Giffin, Pat Pannuto, Prabal Dutta, and Philip Levis. 2017. Multiprogramming a 64kB Computer Safely and Efficiently. In Proceedings of the 26th Symposium on Operating Systems Principles (SOSP ’17). Association for Computing Machinery, New York, NY, USA, 234–251. DOI: <https://doi.org/10.1145/3132747.3132786>
 
 <p>
 <details>
@@ -174,7 +175,6 @@ Amit Levy, Bradford Campbell, Branden Ghena, Daniel B. Giffin, Pat Pannuto, Prab
 </pre>
 </details>
 </p>
-
 
 <p>This is the primary paper that describes the design considerations of Tock.</p>
 
@@ -242,16 +242,15 @@ Amit Levy, Bradford Campbell, Branden Ghena, Daniel B. Giffin, Pat Pannuto, Prab
 }</pre>
 </details>
 
-
 License
 -------
 
 Licensed under either of
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
+  <http://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or
-  http://opensource.org/licenses/MIT)
+  <http://opensource.org/licenses/MIT>)
 
 at your option.
 
