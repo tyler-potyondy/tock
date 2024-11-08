@@ -304,6 +304,12 @@ impl<
         self.radio.set_receive_client(awake_mac);
         self.radio.set_receive_buffer(radio_rx_buf);
 
+        // If the radio is unable to turn on, this interface is broken
+        // and unrecoverable so we panic.
+        self.radio.start().unwrap_or_else(|_| {
+            panic!("Radio failed to start");
+        });
+
         let radio_rx_crypt_buf = static_buffer.9.write([0; MAX_BUF_SIZE]);
 
         let mac_device = static_buffer
