@@ -14,7 +14,6 @@
 
 use core::ptr::{addr_of, addr_of_mut};
 
-use capsules_core::virtualizers::virtual_alarm::VirtualMuxAlarm;
 use components::gpio::GpioComponent;
 use kernel::capabilities;
 use kernel::component::Component;
@@ -22,6 +21,8 @@ use kernel::hil::led::LedHigh;
 use kernel::platform::{KernelResources, SyscallDriverLookup};
 use kernel::scheduler::round_robin::RoundRobinSched;
 use kernel::{create_capability, debug, static_init};
+use stm32wle5jc::chip_specs::Stm32wle5jcSpecs;
+use stm32wle5jc::interrupt_service::Stm32wle5jcDefaultPeripherals;
 
 /// Support routines for debugging I/O.
 pub mod io;
@@ -33,9 +34,7 @@ const NUM_PROCS: usize = 4;
 static mut PROCESSES: [Option<&'static dyn kernel::process::Process>; NUM_PROCS] =
     [None, None, None, None];
 
-static mut CHIP: Option<&'static stm32f429zi::chip::Stm32f4xx<Stm32f429ziDefaultPeripherals>> =
-    None;
-static mut PROCESS_PRINTER: Option<&'static capsules_system::process_printer::ProcessPrinterText> =
+static mut CHIP: Option<&'static stm32wle5jc::chip::Stm32wle5xx<Stm32wle5jcDefaultPeripherals>> =
     None;
 
 // How should the kernel respond when a process faults.
@@ -47,32 +46,21 @@ const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
 #[link_section = ".stack_buffer"]
 pub static mut STACK_MEMORY: [u8; 0x2000] = [0; 0x2000];
 
-type TemperatureSTMSensor = components::temperature_stm::TemperatureSTMComponentType<
-    capsules_core::virtualizers::virtual_adc::AdcDevice<'static, stm32f429zi::adc::Adc<'static>>,
->;
-type TemperatureDriver = components::temperature::TemperatureComponentType<TemperatureSTMSensor>;
-
 /// A structure representing this platform that holds references to all
 /// capsules for this platform.
-struct STM32F429IDiscovery {
-    // console: &'static capsules_core::console::Console<'static>,
-    // ipc: kernel::ipc::IPC<{ NUM_PROCS as u8 }>,
+struct SeeedStudioLoraE5Hf {
     led: &'static capsules_core::led::LedDriver<
         'static,
-        LedHigh<'static, stm32f429zi::gpio::Pin<'static>>,
-        4,
+        LedHigh<'static, stm32wle5jc::gpio::Pin<'static>>,
+        3,
     >,
-    // alarm: &'static capsules_core::alarm::AlarmDriver<
-    //    'static,
-    //    VirtualMuxAlarm<'static, stm32f429zi::tim2::Tim2<'static>>,
-    // >,
     // gpio: &'static capsules_core::gpio::GPIO<'static, stm32f429zi::gpio::Pin<'static>>,
     scheduler: &'static RoundRobinSched<'static>,
     systick: cortexm4::systick::SysTick,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
-impl SyscallDriverLookup for STM32F429IDiscovery {
+impl SyscallDriverLookup for SeeedStudioLoraE5Hf {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
     where
         F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
@@ -90,11 +78,11 @@ impl SyscallDriverLookup for STM32F429IDiscovery {
 
 impl
     KernelResources<
-        stm32f429zi::chip::Stm32f4xx<
+        stm32wle5jc::chip::Stm32wle5xx<
             'static,
-            stm32f429zi::interrupt_service::Stm32f429ziDefaultPeripherals<'static>,
+            stm32wle5jc::interrupt_service::Stm32wle5jcDefaultPeripherals<'static>,
         >,
-    > for STM32F429IDiscovery
+    > for SeeedStudioLoraE5Hf
 {
     type SyscallDriverLookup = Self;
     type SyscallFilter = ();
@@ -250,15 +238,15 @@ unsafe fn set_pin_primary_functions(
 */
 
 /// Helper function for miscellaneous peripheral functions
-unsafe fn setup_peripherals(tim2: &stm32f429zi::tim2::Tim2) {
-    // USART1 IRQn is 37
-    cortexm4::nvic::Nvic::new(stm32f429zi::nvic::USART1).enable();
-
-    // TIM2 IRQn is 28
-    tim2.enable_clock();
-    tim2.start();
-    cortexm4::nvic::Nvic::new(stm32f429zi::nvic::TIM2).enable();
-}
+// unsafe fn setup_peripherals(tim2: &stm32f429zi::tim2::Tim2) {
+//     // USART1 IRQn is 37
+//     cortexm4::nvic::Nvic::new(stm32f429zi::nvic::USART1).enable();
+//
+//     // TIM2 IRQn is 28
+//     tim2.enable_clock();
+//     tim2.start();
+//     cortexm4::nvic::Nvic::new(stm32f429zi::nvic::TIM2).enable();
+// }
 
 /// Statically initialize the core peripherals for the chip.
 ///
@@ -266,32 +254,20 @@ unsafe fn setup_peripherals(tim2: &stm32f429zi::tim2::Tim2) {
 /// removed when this function returns. Otherwise, the stack space used for
 /// these static_inits is wasted.
 #[inline(never)]
-unsafe fn create_peripherals() -> (
-    &'static mut Stm32f429ziDefaultPeripherals<'static>,
-    &'static stm32f429zi::syscfg::Syscfg<'static>,
-    &'static stm32f429zi::dma::Dma2<'static>,
-) {
+unsafe fn create_peripherals() -> &'static mut Stm32wle5jcDefaultPeripherals<'static> {
     // We use the default HSI 16Mhz clock
-    let rcc = static_init!(stm32f429zi::rcc::Rcc, stm32f429zi::rcc::Rcc::new());
+    let rcc = static_init!(stm32wle5jc::rcc::Rcc, stm32wle5jc::rcc::Rcc::new());
     let clocks = static_init!(
-        stm32f429zi::clocks::Clocks<Stm32f429Specs>,
-        stm32f429zi::clocks::Clocks::new(rcc)
+        stm32wle5jc::clocks::Clocks<Stm32wle5jcSpecs>,
+        stm32wle5jc::clocks::Clocks::new(rcc)
     );
-    let syscfg = static_init!(
-        stm32f429zi::syscfg::Syscfg,
-        stm32f429zi::syscfg::Syscfg::new(clocks)
-    );
-    let exti = static_init!(
-        stm32f429zi::exti::Exti,
-        stm32f429zi::exti::Exti::new(syscfg)
-    );
-    let dma1 = static_init!(stm32f429zi::dma::Dma1, stm32f429zi::dma::Dma1::new(clocks));
-    let dma2 = static_init!(stm32f429zi::dma::Dma2, stm32f429zi::dma::Dma2::new(clocks));
+
     let peripherals = static_init!(
-        Stm32f429ziDefaultPeripherals,
-        Stm32f429ziDefaultPeripherals::new(clocks, exti, dma1, dma2)
+        Stm32wle5jcDefaultPeripherals,
+        Stm32wle5jcDefaultPeripherals::new(clocks)
     );
-    (peripherals, syscfg, dma2)
+
+    peripherals
 }
 
 /// Main function
@@ -299,27 +275,17 @@ unsafe fn create_peripherals() -> (
 /// This is called after RAM initialization is complete.
 #[no_mangle]
 pub unsafe fn main() {
-    stm32f429zi::init();
+    stm32wle5jc::init();
 
-    let (peripherals, syscfg, dma2) = create_peripherals();
+    let peripherals = create_peripherals();
     peripherals.init();
-    let base_peripherals = &peripherals.stm32f4;
-
-    setup_peripherals(&base_peripherals.tim2);
-
-    set_pin_primary_functions(syscfg, &base_peripherals.gpio_ports);
-
-    setup_dma(
-        dma2,
-        &base_peripherals.dma2_streams,
-        &base_peripherals.usart1,
-    );
+    let base_peripherals = &peripherals.stm32wle;
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&*addr_of!(PROCESSES)));
 
     let chip = static_init!(
-        stm32f429zi::chip::Stm32f4xx<Stm32f429ziDefaultPeripherals>,
-        stm32f429zi::chip::Stm32f4xx::new(peripherals)
+        stm32wle5jc::chip::Stm32wle5xx<Stm32wle5jcDefaultPeripherals>,
+        stm32wle5jc::chip::Stm32wle5xx::new(peripherals)
     );
     CHIP = Some(chip);
 
@@ -336,31 +302,16 @@ pub unsafe fn main() {
     let gpio_ports = &base_peripherals.gpio_ports;
 
     let led = components::led::LedsComponent::new().finalize(components::led_component_static!(
-        LedHigh<'static, stm32f429zi::gpio::Pin>,
-        LedHigh::new(gpio_ports.get_pin(stm32f429zi::gpio::PinId::PG13).unwrap()),
-        LedHigh::new(gpio_ports.get_pin(stm32f429zi::gpio::PinId::PG14).unwrap()),
-        LedHigh::new(gpio_ports.get_pin(stm32f429zi::gpio::PinId::PB13).unwrap()),
-        LedHigh::new(gpio_ports.get_pin(stm32f429zi::gpio::PinId::PC05).unwrap()),
+        LedHigh<'static, stm32wle5jc::gpio::Pin>,
+        LedHigh::new(gpio_ports.get_pin(stm32wle5jc::gpio::PinId::PB15).unwrap()),
+        LedHigh::new(gpio_ports.get_pin(stm32wle5jc::gpio::PinId::PB09).unwrap()),
+        LedHigh::new(gpio_ports.get_pin(stm32wle5jc::gpio::PinId::PB11).unwrap()),
     ));
-
-    // ALARM
-
-    let tim2 = &base_peripherals.tim2;
-    let mux_alarm = components::alarm::AlarmMuxComponent::new(tim2).finalize(
-        components::alarm_mux_component_static!(stm32f429zi::tim2::Tim2),
-    );
-
-    let alarm = components::alarm::AlarmDriverComponent::new(
-        board_kernel,
-        capsules_core::alarm::DRIVER_NUM,
-        mux_alarm,
-    )
-    .finalize(components::alarm_component_static!(stm32f429zi::tim2::Tim2));
 
     let scheduler = components::sched::round_robin::RoundRobinComponent::new(&*addr_of!(PROCESSES))
         .finalize(components::round_robin_component_static!(NUM_PROCS));
 
-    let stm32f429i_discovery = STM32F429IDiscovery {
+    let seeed_studio_lora_e5_hf = SeeedStudioLoraE5Hf {
         led: led,
         scheduler,
         systick: cortexm4::systick::SysTick::new(),
@@ -406,9 +357,9 @@ pub unsafe fn main() {
     .run();*/
 
     board_kernel.kernel_loop(
-        &stm32f429i_discovery,
+        &seeed_studio_lora_e5_hf,
         chip,
-        Some(&stm32f429i_discovery.ipc),
+        None::<&kernel::ipc::IPC<2>>,
         &main_loop_capability,
     );
 }

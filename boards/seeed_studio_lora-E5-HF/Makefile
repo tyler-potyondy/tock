@@ -5,7 +5,7 @@
 # Makefile for building the tock kernel for the STM32F429i Discovery board
 #
 TARGET=thumbv7em-none-eabi
-PLATFORM=stm32f429idiscovery
+PLATFORM=seeed_studio_lora-E5-HF
 
 include ../Makefile.common
 

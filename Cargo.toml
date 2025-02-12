@@ -96,8 +96,6 @@ members = [
     "chips/veer_el2",
     "chips/stm32wle5xx",
     "chips/stm32wle5jc",
-    "chips/swerv",
-    "chips/swervolf-eh1",
     "chips/virtio",
     "kernel",
     "libraries/enum_primitive",
