@@ -11,12 +11,16 @@ use kernel::utilities::StaticRef;
 struct RccRegisters {
     /// clock control register
     cr: ReadWrite<u32, CR::Register>,
-    /// PLL configuration register
-    pllcfgr: ReadWrite<u32, PLLCFGR::Register>,
+    icsr: ReadWrite<u32, ICSCR::Register>,
     /// clock configuration register
     cfgr: ReadWrite<u32, CFGR::Register>,
-    /// clock interrupt register
-    cir: ReadWrite<u32, CIR::Register>,
+    /// PLL configuration register
+    pllcfgr: ReadWrite<u32, PLLCFGR::Register>,
+    _reserved: [u8; 8],
+    // cier: ReadWrite<u32, CIER::Register>,
+    // cifgr: ReadWrite<u32, CIFGR::Register>,
+    // cicr: ReadWrite<u32, CICR::Register>,
+    // _reserved: [u8; 4]
     /// AHB1 peripheral reset register
     ahb1rstr: ReadWrite<u32, AHB1RSTR::Register>,
     /// AHB2 peripheral reset register
@@ -24,11 +28,12 @@ struct RccRegisters {
     /// AHB3 peripheral reset register
     ahb3rstr: ReadWrite<u32, AHB3RSTR::Register>,
     _reserved0: [u8; 4],
-    /// APB1 peripheral reset register
-    apb1rstr: ReadWrite<u32, APB1RSTR::Register>,
+    /// APB1 peripheral reset register 1
+    apb1rstr1: ReadWrite<u32, APB1RSTR::Register>,
+    // apb1rstr2: ReadWrite<u32, APB1RSTR2::Register>,
     /// APB2 peripheral reset register
     apb2rstr: ReadWrite<u32, APB2RSTR::Register>,
-    _reserved1: [u8; 8],
+    //apb3rstr: ReadWrite<u32, APB3RSTR::Register>,
     /// AHB1 peripheral clock register
     ahb1enr: ReadWrite<u32, AHB1ENR::Register>,
     /// AHB2 peripheral clock enable register
@@ -36,68 +41,56 @@ struct RccRegisters {
     /// AHB3 peripheral clock enable register
     ahb3enr: ReadWrite<u32, AHB3ENR::Register>,
     _reserved2: [u8; 4],
-    /// APB1 peripheral clock enable register
-    apb1enr: ReadWrite<u32, APB1ENR::Register>,
+    /// APB1 peripheral clock enable register 1
+    apb1enr1: ReadWrite<u32, APB1ENR::Register>,
+    // apb1enr2: ReadWrite<u32, APB1ENR2::Register>,
     /// APB2 peripheral clock enable register
     apb2enr: ReadWrite<u32, APB2ENR::Register>,
-    _reserved3: [u8; 8],
-    /// AHB1 peripheral clock enable in low power mode register
-    ahb1lpenr: ReadWrite<u32, AHB1LPENR::Register>,
-    /// AHB2 peripheral clock enable in low power mode register
-    ahb2lpenr: ReadWrite<u32, AHB2LPENR::Register>,
-    /// AHB3 peripheral clock enable in low power mode register
-    ahb3lpenr: ReadWrite<u32, AHB3LPENR::Register>,
-    _reserved4: [u8; 4],
-    /// APB1 peripheral clock enable in low power mode register
-    apb1lpenr: ReadWrite<u32, APB1LPENR::Register>,
-    /// APB2 peripheral clock enabled in low power mode register
-    apb2lpenr: ReadWrite<u32, APB2LPENR::Register>,
-    _reserved5: [u8; 8],
-    /// Backup domain control register
-    bdcr: ReadWrite<u32, BDCR::Register>,
-    /// clock control & status register
-    csr: ReadWrite<u32, CSR::Register>,
-    _reserved6: [u8; 8],
-    /// spread spectrum clock generation register
-    sscgr: ReadWrite<u32, SSCGR::Register>,
-    /// PLLI2S configuration register
-    plli2scfgr: ReadWrite<u32, PLLI2SCFGR::Register>,
-    /// PLL configuration register
-    pllsaicfgr: ReadWrite<u32, PLLSAICFGR::Register>,
-    /// Dedicated Clock Configuration Register
-    dckcfgr: ReadWrite<u32, DCKCFGR::Register>,
-    /// clocks gated enable register
-    ckgatenr: ReadWrite<u32, CKGATENR::Register>,
-    /// dedicated clocks configuration register 2
-    dckcfgr2: ReadWrite<u32, DCKCFGR2::Register>,
+    // apb3enr: ReadWrite<u32, APB3ENR::Register>,
+    // ahb1smenr: ReadWrite<u32, AHB1SMENR::Register>,
+    // ahb2smenr: ReadWrite<u32, AHB2SMENR::Register>,
+    // ahb3smenr: ReadWrite<u32, AHB3SMENR::Register>,
+    // _reserved: [u8; 4],
+    // apb1smenr1: ReadWrite<u32, APB1SMENR::Register>,
+    // apb1smenr2: ReadWrite<u32, APB1SMENR2::Register>,
+    // apb2smenr: ReadWrite<u32, APB2SMENR::Register>,
+    // apb3smenr: ReadWrite<u32, APB3SMENR::Register>,
+    // ccipr: ReadWrite<u32, CCIPR::Register>,
+    // reserved: [u8; 4],
+    // bdcr: ReadWrite<u32, BDCR::Register>,
+    // csr: ReadWrite<u32, CSR::Register>,
+    // extcfgr: ReadWrite<u32, EXTCFGR::Register>,
 }
 
+// TODO ADD DOC COMMENTS
 register_bitfields![u32,
     CR [
-        /// PLLI2S clock ready flag
-        PLLI2SRDY OFFSET(27) NUMBITS(1) [],
-        /// PLLI2S enable
-        PLLI2SON OFFSET(26) NUMBITS(1) [],
-        /// Main PLL (PLL) clock ready flag
         PLLRDY OFFSET(25) NUMBITS(1) [],
-        /// Main PLL (PLL) enable
         PLLON OFFSET(24) NUMBITS(1) [],
-        /// Clock security system enable
+        HSEBYPPWR OFFSET(21) NUMBITS(1) [],
+        HSEPRE OFFSET(20) NUMBITS(1) [],
         CSSON OFFSET(19) NUMBITS(1) [],
-        /// HSE clock bypass
-        HSEBYP OFFSET(18) NUMBITS(1) [],
-        /// HSE clock ready flag
         HSERDY OFFSET(17) NUMBITS(1) [],
-        /// HSE clock enable
         HSEON OFFSET(16) NUMBITS(1) [],
-        /// Internal high-speed clock calibration
-        HSICAL OFFSET(8) NUMBITS(8) [],
-        /// Internal high-speed clock trimming
-        HSITRIM OFFSET(3) NUMBITS(5) [],
-        /// Internal high-speed clock ready flag
-        HSIRDY OFFSET(1) NUMBITS(1) [],
-        /// Internal high-speed clock enable
-        HSION OFFSET(0) NUMBITS(1) []
+        HSIKERDY OFFSET(12) NUMBITS(1) [],
+        HSIASFS OFFSET(11) NUMBITS(1) [],
+        HSIRDY OFFSET(10) NUMBITS(1) [],
+        HSIKERON OFFSET(9) NUMBITS(1) [],
+        HSION OFFSET(8) NUMBITS(1) [],
+        MSIRANGE OFFSET(5) NUMBITS(4) [],
+        MSIRGSEL OFFSET(4) NUMBITS(1) [],
+        MSIRANGE OFFSET(3) NUMBITS(1) [],
+        MSIPLLEN OFFSET(2) NUMBITS(1) [],
+        /// xxx clock ready flag
+        MSIRDY OFFSET(1) NUMBITS(1) [],
+        /// xxxx clock enable
+        MSION OFFSET(0) NUMBITS(1) [],
+    ],
+    ICSCR [
+        HSITRIM OFFSET(24) NUMBITS(7) [],
+        HSICAL OFFSET(16) NUMBITS(8) [],
+        MSITRIM OFFSET(8) NUMBITS(8) [],
+        MSICAL OFFSET(0) NUMBITS (8) [],
     ],
     PLLCFGR [
         /// Main PLL (PLL) division factor for USB OTG FS, SDIO and random num
@@ -120,18 +113,12 @@ register_bitfields![u32,
         PLLM OFFSET(0) NUMBITS(6) []
     ],
     CFGR [
-        /// Microcontroller clock output 2
-        MCO2 OFFSET(30) NUMBITS(2) [],
-        /// MCO2 prescaler
-        MCO2PRE OFFSET(27) NUMBITS(3) [],
-        /// MCO1 prescaler
-        MCO1PRE OFFSET(24) NUMBITS(3) [],
-        /// I2S clock selection
-        I2SSRC OFFSET(23) NUMBITS(1) [],
-        /// Microcontroller clock output 1
-        MCO1 OFFSET(21) NUMBITS(2) [],
-        /// HSE division factor for RTC clock
-        RTCPRE OFFSET(16) NUMBITS(5) [],
+        MCOPRE OFFSET(28) NUMBITS(4) [],
+        MCOSEL OFFSET(24) NUMBITS(4) [],
+        PPRE2F OFFSET(18) NUMBITS(1) [],
+        PPRE1F OFFSET(17) NUMBITS(1) [],
+        HPRE OFFSET(16) NUMBITS(1) [],
+        STOPWUICK OFFSET(15) NUMBITS(1) [],
         /// APB high-speed prescaler (APB2)
         PPRE2 OFFSET(13) NUMBITS(3) [],
         /// APB Low speed prescaler (APB1)
@@ -142,9 +129,10 @@ register_bitfields![u32,
         SWS OFFSET(2) NUMBITS(2) [],
         /// System clock switch
         SW OFFSET(0) NUMBITS(2) [
-            HSI = 0b00,
-            HSE = 0b01,
-            PLL = 0b10,
+            MSI = 0b00,
+            HSI16 = 0b01,
+            HSE32 = 0b10,
+            PLL = 0b11,
         ]
     ],
     CIR [
@@ -704,7 +692,7 @@ register_bitfields![u32,
 ];
 
 const RCC_BASE: StaticRef<RccRegisters> =
-    unsafe { StaticRef::new(0x40023800 as *const RccRegisters) };
+    unsafe { StaticRef::new(0x58000000 as *const RccRegisters) };
 
 // Default values when the hardware is reset. Uncomment if you need them.
 //pub(crate) const RESET_PLLM_VALUE: usize = PLLM::DivideBy16; // M = 16
@@ -776,8 +764,9 @@ impl Rcc {
     // Get the current system clock source
     pub(crate) fn get_sys_clock_source(&self) -> SysClockSource {
         match self.registers.cfgr.read(CFGR::SWS) {
-            0b00 => SysClockSource::HSI,
-            0b01 => SysClockSource::HSE,
+            0b00 => SysClockSource::MSI,
+            0b01 => SysClockSource::HSI,
+            0b10 => SysClockSource::HSE,
             _ => SysClockSource::PLL,
             // Uncomment this when PPLLR support is added. Also change the above match arm to
             // 0b10 => SysClockSource::PLL,
@@ -792,6 +781,13 @@ impl Rcc {
         self.registers.cfgr.modify(CFGR::SW.val(source as u32));
     }
 
+    pub(crate) fn is_msi_clock_system_clock(&self) -> bool {
+        let system_clock_source = self.get_sys_clock_source();
+        system_clock_source == SysClockSource::MSI
+            || system_clock_source == SysClockSource::PLL
+                && self.registers.pllcfgr.read(PLLCFGR::PLLSRC) == PllSource::MSI as u32
+    }
+
     pub(crate) fn is_hsi_clock_system_clock(&self) -> bool {
         let system_clock_source = self.get_sys_clock_source();
         system_clock_source == SysClockSource::HSI
@@ -804,6 +800,23 @@ impl Rcc {
         system_clock_source == SysClockSource::HSE
             || system_clock_source == SysClockSource::PLL
                 && self.registers.pllcfgr.read(PLLCFGR::PLLSRC) == PllSource::HSE as u32
+    }
+
+    /* MSI close */
+    pub(crate) fn disable_msi_clock(&self) {
+        self.registers.cr.modify(CR::MSION::CLEAR);
+    }
+
+    pub(crate) fn enable_msi_clock(&self) {
+        self.registers.cr.modify(CR::MSION::SET);
+    }
+
+    pub(crate) fn is_enabled_msi_clock(&self) -> bool {
+        self.registers.cr.is_set(CR::MSION)
+    }
+
+    pub(crate) fn is_ready_msi_clock(&self) -> bool {
+        self.registers.cr.is_set(CR::MSIRDY)
     }
 
     /* HSI clock */
@@ -828,11 +841,11 @@ impl Rcc {
     /* HSE clock */
     pub(crate) fn disable_hse_clock(&self) {
         self.registers.cr.modify(CR::HSEON::CLEAR);
-        self.registers.cr.modify(CR::HSEBYP::CLEAR);
+        self.registers.cr.modify(CR::HSEBYPPWR::CLEAR);
     }
 
     pub(crate) fn enable_hse_clock_bypass(&self) {
-        self.registers.cr.modify(CR::HSEBYP::SET);
+        self.registers.cr.modify(CR::HSEBYPPWR::SET);
     }
 
     pub(crate) fn enable_hse_clock(&self) {
@@ -1450,16 +1463,16 @@ pub(crate) enum PLLQ {
 /// Clock sources for the CPU
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum SysClockSource {
-    HSI = 0b00,
-    HSE = 0b01,
-    PLL = 0b10,
-    // NOTE: not all STM32F4xx boards support this source.
-    //PPLLR = 0b11, Uncomment this when support for PPLLR is added
+    MSI = 0b00,
+    HSI = 0b01,
+    HSE = 0b10,
+    PLL = 0b11,
 }
 
 pub enum PllSource {
-    HSI = 0b0,
-    HSE = 0b1,
+    MSI = 0b01,
+    HSI = 0b10,
+    HSE = 0b11,
 }
 
 pub enum MCO1Source {
