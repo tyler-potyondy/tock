@@ -15,7 +15,7 @@ install: flash
 
 .PHONY: flash-debug
 flash-debug: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/debug/$(PLATFORM).bin
-	$(OPENOCD) -c "source [find board/stm32f429discovery.cfg]; init; reset halt; program $< verify 0x08000000; reset; shutdown"
+	$(OPENOCD) -f interface/jlink.cfg -c "transport select swd" -f target/stm32wlx.cfg -c "init; reset halt; program $< verify 0x08000000; reset; shutdown" 
 
 .PHONY: flash
 flash: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).bin
