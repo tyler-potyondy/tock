@@ -196,6 +196,14 @@ pub unsafe fn main() {
     //--------------------------------------------------------------------
     // Usart
     //--------------------------------------------------------------------
+    base_peripherals
+        .gpio_ports
+        .get_port_from_port_id(stm32mp157f::gpio::PortId::B)
+        .enable_clock();
+    base_peripherals
+        .gpio_ports
+        .get_port_from_port_id(stm32mp157f::gpio::PortId::G)
+        .enable_clock();
     base_peripherals.usart4.enable_clock();
 
     // EV1 ST-LINK VCP is routed from UART4:
@@ -317,11 +325,6 @@ pub unsafe fn main() {
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
-
-    //Uncomment to run multi alarm test
-    /*components::test::multi_alarm_test::MultiAlarmTestComponent::new(mux_alarm)
-    .finalize(components::multi_alarm_test_component_buf!(stm32f429zi::tim2::Tim2))
-    .run();*/
 
     board_kernel.kernel_loop(
         &stm32mp157f_ev1,

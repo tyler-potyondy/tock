@@ -45,11 +45,7 @@ impl<'a, ChipSpecs: ChipSpecsTrait> InterruptService
 {
     unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
         match interrupt {
-            //            nvic::USART1 => self.usart1.handle_interrupt(),
-            //            nvic::USART2 => self.usart2.handle_interrupt(),
-            //
-            //            nvic::TIM2 => self.tim2.handle_interrupt(),
-            //
+            nvic::UART4 => self.usart4.handle_interrupt(),
             _ => return false,
         }
         true

@@ -555,6 +555,8 @@ impl DeferredCallClient for Usart<'_> {
             });
             self.rx_status.set(USARTStateRX::Idle);
         }
+
+        panic!("completed handling uart interrupt");
     }
 }
 
