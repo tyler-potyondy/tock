@@ -54,9 +54,6 @@ static PANIC_RESOURCES: SingleThreadValue<PanicResources<ChipHw, ProcessPrinterI
 const FAULT_RESPONSE: capsules_system::process_policies::PanicFaultPolicy =
     capsules_system::process_policies::PanicFaultPolicy {};
 
-const LORA_SPI_DRIVER_NUM: usize = capsules_core::driver::NUM::LoRaPhySPI as usize;
-const LORA_GPIO_DRIVER_NUM: usize = capsules_core::driver::NUM::LoRaPhyGPIO as usize;
-
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
 #[link_section = ".stack_buffer"]
@@ -66,6 +63,12 @@ pub static mut STACK_MEMORY: [u8; 0x2000] = [0; 0x2000];
 /// capsules for this platform.
 struct Stm32mp157fev1 {
     scheduler: &'static SchedulerInUse,
+    systick: cortexm4::systick::SysTick,
+    console: &'static capsules_core::console::Console<'static>,
+    alarm: &'static capsules_core::alarm::AlarmDriver<
+        'static,
+        VirtualMuxAlarm<'static, stm32mp157f::tim2::Tim2<'static>>,
+    >,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -75,6 +78,8 @@ impl SyscallDriverLookup for Stm32mp157fev1 {
         F: FnOnce(Option<&dyn kernel::syscall::SyscallDriver>) -> R,
     {
         match driver_num {
+            capsules_core::console::DRIVER_NUM => f(Some(self.console)),
+            capsules_core::alarm::DRIVER_NUM => f(Some(self.alarm)),
             _ => f(None),
         }
     }
@@ -92,7 +97,7 @@ impl
     type SyscallFilter = ();
     type ProcessFault = ();
     type Scheduler = SchedulerInUse;
-    type SchedulerTimer = ();
+    type SchedulerTimer = cortexm4::systick::SysTick;
     type WatchDog = ();
     type ContextSwitchCallback = ();
 
@@ -109,7 +114,7 @@ impl
         self.scheduler
     }
     fn scheduler_timer(&self) -> &Self::SchedulerTimer {
-        &()
+        &self.systick
     }
     fn watchdog(&self) -> &Self::WatchDog {
         &()
@@ -119,17 +124,14 @@ impl
     }
 }
 
-/*
 /// Helper function for miscellaneous peripheral functions
-unsafe fn setup_peripherals(tim2: &stm32wle5jc::tim2::Tim2, subghz_spi: &stm32wle5jc::spi::Spi) {
-    cortexm4::nvic::Nvic::new(stm32wle5jc::nvic::USART1).enable();
-    cortexm4::nvic::Nvic::new(stm32wle5jc::nvic::USART2).enable();
+unsafe fn setup_peripherals(tim2: &stm32mp157f::tim2::Tim2) {
+    cortexm4::nvic::Nvic::new(stm32mp157f::nvic::UART4).enable();
 
-    cortexm4::nvic::Nvic::new(stm32wle5jc::nvic::TIM2).enable();
+    cortexm4::nvic::Nvic::new(stm32mp157f::nvic::TIM2).enable();
     tim2.enable_clock();
-    tim2.start().expect("Failure starting stm32wle5jc TIM2.");
+    tim2.start();
 }
-*/
 
 /// Statically initialize the core peripherals for the chip.
 ///
@@ -167,6 +169,8 @@ pub unsafe fn main() {
     let peripherals = create_peripherals();
     peripherals.init();
     let base_peripherals = &peripherals.stm32mp157x;
+
+    setup_peripherals(&base_peripherals.tim2);
 
     // Create an array to hold process references.
     let processes = components::process_array::ProcessArrayComponent::new()
@@ -231,27 +235,26 @@ pub unsafe fn main() {
     //--------------------------------------------------------------------
     // Alarm
     //--------------------------------------------------------------------
-    // let tim2 = &base_peripherals.tim2;
-    // let mux_alarm = components::alarm::AlarmMuxComponent::new(tim2).finalize(
-    //     components::alarm_mux_component_static!(stm32wle5jc::tim2::Tim2),
-    // );
+    let mux_alarm = components::alarm::AlarmMuxComponent::new(&base_peripherals.tim2).finalize(
+        components::alarm_mux_component_static!(stm32mp157f::tim2::Tim2),
+    );
 
-    // let alarm = components::alarm::AlarmDriverComponent::new(
-    //     board_kernel,
-    //     capsules_core::alarm::DRIVER_NUM,
-    //     mux_alarm,
-    // )
-    // .finalize(components::alarm_component_static!(stm32wle5jc::tim2::Tim2));
+    let alarm = components::alarm::AlarmDriverComponent::new(
+        board_kernel,
+        capsules_core::alarm::DRIVER_NUM,
+        mux_alarm,
+    )
+    .finalize(components::alarm_component_static!(stm32mp157f::tim2::Tim2));
 
     //--------------------------------------------------------------------
     // Console.
     //--------------------------------------------------------------------
-    // let console = components::console::ConsoleComponent::new(
-    //     board_kernel,
-    //     capsules_core::console::DRIVER_NUM,
-    //     uart_mux,
-    // )
-    // .finalize(components::console_component_static!());
+    let console = components::console::ConsoleComponent::new(
+        board_kernel,
+        capsules_core::console::DRIVER_NUM,
+        uart_mux,
+    )
+    .finalize(components::console_component_static!());
 
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new::<
@@ -262,8 +265,8 @@ pub unsafe fn main() {
     )
     .finalize(components::debug_writer_component_static!());
 
-    //let process_printer = components::process_printer::ProcessPrinterTextComponent::new()
-    //    .finalize(components::process_printer_text_component_static!());
+    let process_printer = components::process_printer::ProcessPrinterTextComponent::new()
+        .finalize(components::process_printer_text_component_static!());
 
     //--------------------------------------------------------------------
     // LED
@@ -275,23 +278,26 @@ pub unsafe fn main() {
 
     // PROCESS CONSOLE
     //--------------------------------------------------------------------
-    // let process_console = components::process_console::ProcessConsoleComponent::new(
-    //     board_kernel,
-    //     uart_mux,
-    //     mux_alarm,
-    //     process_printer,
-    //     Some(cortexm4::support::reset),
-    // )
-    // .finalize(components::process_console_component_static!(
-    //     stm32wle5jc::tim2::Tim2
-    // ));
-    // let _ = process_console.start();
+    let process_console = components::process_console::ProcessConsoleComponent::new(
+        board_kernel,
+        uart_mux,
+        mux_alarm,
+        process_printer,
+        Some(cortexm4::support::reset),
+    )
+    .finalize(components::process_console_component_static!(
+        stm32mp157f::tim2::Tim2
+    ));
+    let _ = process_console.start();
 
-    // let scheduler = components::sched::round_robin::RoundRobinComponent::new(processes)
-    //    .finalize(components::round_robin_component_static!(NUM_PROCS));
+    let scheduler = components::sched::round_robin::RoundRobinComponent::new(processes)
+        .finalize(components::round_robin_component_static!(NUM_PROCS));
 
     let stm32mp157f_ev1 = Stm32mp157fev1 {
-        scheduler: static_init!(SchedulerInUse, SchedulerInUse::new()),
+        console,
+        scheduler,
+        alarm,
+        systick: cortexm4::systick::SysTick::new_with_calibration(64_000_000_u32),
     };
 
     debug!("Initialization complete. Entering main loop...");

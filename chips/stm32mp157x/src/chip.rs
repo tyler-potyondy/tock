@@ -22,6 +22,7 @@ pub struct Stm32mp157xDefaultPeripherals<'a, ChipSpecs> {
     pub gpio_ports: crate::gpio::GpioPorts<'a>,
     pub clocks: &'a crate::clocks::Clocks<'a, ChipSpecs>,
     pub usart4: crate::usart::Usart<'a>,
+    pub tim2: crate::tim2::Tim2<'a>,
 }
 
 impl<'a, ChipSpecs: ChipSpecsTrait> Stm32mp157xDefaultPeripherals<'a, ChipSpecs> {
@@ -30,6 +31,7 @@ impl<'a, ChipSpecs: ChipSpecsTrait> Stm32mp157xDefaultPeripherals<'a, ChipSpecs>
             gpio_ports: crate::gpio::GpioPorts::new(clocks),
             clocks,
             usart4: crate::usart::Usart::new_uart4(clocks),
+            tim2: crate::tim2::Tim2::new(clocks),
         }
     }
 
@@ -46,6 +48,7 @@ impl<'a, ChipSpecs: ChipSpecsTrait> InterruptService
     unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
         match interrupt {
             nvic::UART4 => self.usart4.handle_interrupt(),
+            nvic::TIM2 => self.tim2.handle_interrupt(),
             _ => return false,
         }
         true

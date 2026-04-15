@@ -396,9 +396,9 @@ struct RccRegisters {
     /// Reserved.
     _reserved23: [u32; 16],
     /// RCC APB1 Peripheral Enable for MCU Set Register.
-    mc_apb1ensetr: ReadWrite<u32>,
+    mc_apb1ensetr: ReadWrite<u32, MC_APB1ENSET::Register>,
     /// RCC APB1 Peripheral Enable for MCU Clear Register.
-    mc_apb1enclrr: ReadWrite<u32>,
+    mc_apb1enclrr: ReadWrite<u32, MC_APB1ENCLR::Register>,
     /// RCC APB2 Peripheral Enable for MCU Set Register.
     mc_apb2ensetr: ReadWrite<u32>,
     /// RCC APB2 Peripheral Enable for MCU Clear Register.
@@ -767,6 +767,40 @@ register_bitfields![u32,
         GPIOKEN OFFSET(10) NUMBITS(1) [],
     ],
 
+    MC_APB1ENSET [
+        /// TIM2 peripheral enable.
+        TIM2EN OFFSET(0) NUMBITS(1) [],
+        /// TIM3 peripheral enable.
+        TIM3EN OFFSET(1) NUMBITS(1) [],
+        /// TIM4 peripheral enable.
+        TIM4EN OFFSET(2) NUMBITS(1) [],
+        /// TIM5 peripheral enable.
+        TIM5EN OFFSET(3) NUMBITS(1) [],
+        /// TIM6 peripheral enable.
+        TIM6EN OFFSET(4) NUMBITS(1) [],
+        /// TIM7 peripheral enable.
+        TIM7EN OFFSET(5) NUMBITS(1) [],
+        /// TIM12 peripheral enable.
+        TIM12EN OFFSET(6) NUMBITS(1) [],
+        /// TIM13 peripheral enable.
+        TIM13EN OFFSET(7) NUMBITS(1) [],
+        // TODO incomplete
+    ],
+    MC_APB1ENCLR [
+        /// TIM2 peripheral enable.
+        TIM2EN OFFSET(0) NUMBITS(1) [],
+        /// TIM3 peripheral enable.
+        TIM3EN OFFSET(1) NUMBITS(1) [],
+        /// TIM4 peripheral enable.
+        TIM4EN OFFSET(2) NUMBITS(1) [],
+        /// TIM5 peripheral enable.
+        TIM5EN OFFSET(3) NUMBITS(1) [],
+        /// TIM6 peripheral enable.
+        TIM6EN OFFSET(4) NUMBITS(1) [],
+        /// TIM7 peripheral enable.
+        TIM7EN OFFSET(5) NUMBITS(1) [],
+        // todo incomplete
+    ],
     // Legacy STM32F-style RCC definitions removed.
 ];
 
@@ -804,7 +838,11 @@ impl Rcc {
 
     // Get the current system clock source
     pub(crate) fn get_sys_clock_source(&self) -> SysClockSource {
-        unimplemented!("get_sys_clock_source");
+        match self.registers.mssckselr.read(MSSCKSELR::MCUSSRC) {
+            0b00 => SysClockSource::HSI,
+            0b01 => SysClockSource::HSE,
+            _ => SysClockSource::PLL,
+        }
     }
 
     // Set the system clock source
@@ -942,7 +980,17 @@ impl Rcc {
     }
 
     pub(crate) fn get_ahb_prescaler(&self) -> AHBPrescaler {
-        unimplemented!("get_ahb_prescaler");
+        match self.registers.mcudivr.get() & 0b1111 {
+            0b1000 => AHBPrescaler::DivideBy2,
+            0b1001 => AHBPrescaler::DivideBy4,
+            0b1010 => AHBPrescaler::DivideBy8,
+            0b1011 => AHBPrescaler::DivideBy16,
+            0b1100 => AHBPrescaler::DivideBy64,
+            0b1101 => AHBPrescaler::DivideBy128,
+            0b1110 => AHBPrescaler::DivideBy256,
+            0b1111 => AHBPrescaler::DivideBy512,
+            _ => AHBPrescaler::DivideBy1,
+        }
     }
 
     /* APB1 prescaler */
@@ -953,7 +1001,13 @@ impl Rcc {
     }
 
     pub(crate) fn get_apb1_prescaler(&self) -> APBPrescaler {
-        unimplemented!("get_apb1_prescaler");
+        match self.registers.apb1divr.get() & 0b111 {
+            0b100 => APBPrescaler::DivideBy2,
+            0b101 => APBPrescaler::DivideBy4,
+            0b110 => APBPrescaler::DivideBy8,
+            0b111 => APBPrescaler::DivideBy16,
+            _ => APBPrescaler::DivideBy1,
+        }
     }
 
     /* APB2 prescaler */
@@ -1019,19 +1073,23 @@ impl Rcc {
 
     // TIM2 clock
     pub(crate) fn is_enabled_tim_pre(&self) -> bool {
-        unimplemented!("is_enabled_tim_pre");
+        (self.registers.timg1prer.get() & 0x1) != 0
     }
 
     pub(crate) fn is_enabled_tim2_clock(&self) -> bool {
-        unimplemented!("is_enabled_tim2_clock");
+        self.registers.mc_apb1ensetr.is_set(MC_APB1ENSET::TIM2EN)
     }
 
     pub(crate) fn enable_tim2_clock(&self) {
-        unimplemented!("enable_tim2_clock");
+        self.registers
+            .mc_apb1ensetr
+            .modify(MC_APB1ENSET::TIM2EN::SET);
     }
 
     pub(crate) fn disable_tim2_clock(&self) {
-        unimplemented!("disable_tim2_clock");
+        self.registers
+            .mc_apb1enclrr
+            .modify(MC_APB1ENCLR::TIM2EN::CLEAR);
     }
 
     // SYSCFG clock
