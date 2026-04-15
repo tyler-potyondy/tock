@@ -1,0 +1,17 @@
+# Licensed under the Apache License, Version 2.0 or the MIT License.
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright Tock Contributors 2025.
+#
+# connect.gdb - GDB startup script for STM32MP157F-EV1 (Cortex-M4)
+
+# Load ELF file with symbols
+file ../../target/thumbv7em-none-eabi/debug/stm32mp157f-ev1.elf
+
+# CM4 GDB port: confirm in OpenOCD log (often 3334 with deferred A7 cores).
+target remote localhost:3334
+
+# Switch OpenOCD to CM4 target and halt
+monitor targets STM32MP157CAAx.cm4
+monitor reset halt
+
+echo "Connected to STM32MP157 Cortex-M4 (see OpenOCD log for TCP port)\n"

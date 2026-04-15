@@ -1569,6 +1569,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "stm32mp157f"
+version = "0.2.3-dev"
+dependencies = [
+ "cortexm4f",
+ "kernel",
+ "stm32mp157x",
+]
+
+[[package]]
+name = "stm32mp157f-ev1"
+version = "0.2.3-dev"
+dependencies = [
+ "capsules-core",
+ "capsules-extra",
+ "capsules-system",
+ "components",
+ "cortexm4",
+ "kernel",
+ "stm32mp157f",
+ "tock_build_scripts",
+]
+
+[[package]]
+name = "stm32mp157x"
+version = "0.2.3-dev"
+dependencies = [
+ "cortexm4f",
+ "enum_primitive",
+ "kernel",
+]
+
+[[package]]
 name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
