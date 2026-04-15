@@ -11,6 +11,18 @@ BOARD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 include ../Makefile.common
 
 OPENOCD=openocd
+TOCKLOADER ?= tockloader
+DD ?= dd
+
+KERNEL_FLASH_ADDRESS := 0x10000000
+APPS_FLASH_ADDRESS := 0x10020000
+
+APP_BUILD_DIR := /Users/tom/tock-org/tock/boards/stm32mp157f-ev1/app_builds
+APPS_TAB_FILES := $(sort $(wildcard $(APP_BUILD_DIR)/*.tab))
+LOCAL_APPS_BOARD := stm32mp157f-ev1-local-apps
+
+APPS_BUNDLE_BIN := $(APP_BUILD_DIR)/apps_bundle.bin
+KERNEL_AND_APPS_BIN := $(APP_BUILD_DIR)/kernel_and_apps.bin
 
 # OpenOCD configuration for STM32MP1 engineering mode.
 # Engineering mode: Cortex-A7 is not running, M4 loaded directly via debugger.
@@ -55,3 +67,30 @@ flash: $(TOCK_ROOT_DIRECTORY)target/$(TARGET)/release/$(PLATFORM).elf
 	-c "load_image $<" \
 	-c "verify_image $<" \
 	-c "source $(BOARD_DIR)openocd_cm4_resume.tcl"
+
+.PHONY: flash-kernel-and-apps
+flash-kernel-and-apps: $(KERNEL_AND_APPS_BIN)
+	$(OPENOCD) $(OPENOCD_CFG) $(OPENOCD_LOAD) \
+	-c "load_image $< $(KERNEL_FLASH_ADDRESS)" \
+	-c "verify_image $< $(KERNEL_FLASH_ADDRESS)" \
+	-c "source $(BOARD_DIR)openocd_cm4_resume.tcl"
+
+$(APPS_BUNDLE_BIN): $(APPS_TAB_FILES)
+	@if [ -z "$(strip $(APPS_TAB_FILES))" ]; then \
+		echo "No app TAB files found in $(APP_BUILD_DIR)."; \
+		echo "Build apps first so $(APP_BUILD_DIR) contains *.tab files."; \
+		exit 1; \
+	fi
+	@set -euo pipefail; \
+	trap '$(TOCKLOADER) local-board unset >/dev/null 2>&1 || true' EXIT; \
+	rm -f "$@"; \
+	$(TOCKLOADER) local-board set $(LOCAL_APPS_BOARD) \
+		--binary-path "$@" \
+		--arch cortex-m4 \
+		--app-address $(APPS_FLASH_ADDRESS) \
+		--flash-address $(KERNEL_FLASH_ADDRESS); \
+	$(TOCKLOADER) install --local-board --board $(LOCAL_APPS_BOARD) --bundle-apps $(APPS_TAB_FILES)
+
+$(KERNEL_AND_APPS_BIN): $(TARGET_PATH)/release/$(PLATFORM).bin $(APPS_BUNDLE_BIN)
+	$(Q)cp "$(APPS_BUNDLE_BIN)" "$@"
+	$(Q)$(DD) if="$<" of="$@" conv=notrunc status=none
