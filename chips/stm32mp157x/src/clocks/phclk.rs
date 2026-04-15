@@ -52,6 +52,7 @@ pub enum PCLK1 {
     TIM2,
     USART2,
     USART3,
+    UART4,
     SPI3,
     I2C1,
     CAN1,
@@ -147,6 +148,7 @@ impl ClockInterface for PeripheralClock<'_> {
                 PCLK1::TIM2 => rcc.is_enabled_tim2_clock(),
                 PCLK1::USART2 => rcc.is_enabled_usart2_clock(),
                 PCLK1::USART3 => rcc.is_enabled_usart3_clock(),
+                PCLK1::UART4 => rcc.is_enabled_uart4_clock(),
                 PCLK1::I2C1 => rcc.is_enabled_i2c1_clock(),
                 PCLK1::SPI3 => rcc.is_enabled_spi3_clock(),
                 PCLK1::CAN1 => rcc.is_enabled_can1_clock(),
@@ -218,6 +220,9 @@ impl ClockInterface for PeripheralClock<'_> {
                 PCLK1::USART3 => {
                     rcc.enable_usart3_clock();
                 }
+                PCLK1::UART4 => {
+                    rcc.enable_uart4_clock();
+                }
                 PCLK1::I2C1 => {
                     rcc.enable_i2c1_clock();
                 }
@@ -242,7 +247,7 @@ impl ClockInterface for PeripheralClock<'_> {
                     rcc.enable_syscfg_clock();
                 }
             },
-            PeripheralClockType::RTC => rcc.enable_rtc_clock(RtcClockSource::LSI),
+            PeripheralClockType::RTC => rcc.enable_rtc_clock(RtcClockSource::LSE),
             PeripheralClockType::PWR => rcc.enable_pwr_clock(),
         }
     }
@@ -302,6 +307,9 @@ impl ClockInterface for PeripheralClock<'_> {
                 }
                 PCLK1::USART3 => {
                     rcc.disable_usart3_clock();
+                }
+                PCLK1::UART4 => {
+                    rcc.disable_uart4_clock();
                 }
                 PCLK1::I2C1 => {
                     rcc.disable_i2c1_clock();

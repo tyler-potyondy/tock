@@ -18,44 +18,31 @@ pub struct Stm32mp157x<'a, I: InterruptService + 'a> {
     interrupt_service: &'a I,
 }
 
-pub struct Stm32mp157xDefaultPeripherals<ChipSpecs> {
-    // pub gpio_ports: crate::gpio::GpioPorts<'a>,
-    // pub clocks: &'a crate::clocks::Clocks<'a, ChipSpecs>,
-    // pub tim2: crate::tim2::Tim2<'a>,
-    // pub usart1: crate::usart::Usart<'a>,
-    // pub usart2: crate::usart::Usart<'a>,
-    associated_data: core::marker::PhantomData<ChipSpecs>,
+pub struct Stm32mp157xDefaultPeripherals<'a, ChipSpecs> {
+    pub gpio_ports: crate::gpio::GpioPorts<'a>,
+    pub clocks: &'a crate::clocks::Clocks<'a, ChipSpecs>,
+    pub usart4: crate::usart::Usart<'a>,
 }
 
-impl<ChipSpecs: ChipSpecsTrait> Stm32mp157xDefaultPeripherals<ChipSpecs> {
-    pub fn new() -> Self {
+impl<'a, ChipSpecs: ChipSpecsTrait> Stm32mp157xDefaultPeripherals<'a, ChipSpecs> {
+    pub fn new(clocks: &'a crate::clocks::Clocks<'a, ChipSpecs>) -> Self {
         Self {
-            associated_data: core::marker::PhantomData,
+            gpio_ports: crate::gpio::GpioPorts::new(clocks),
+            clocks,
+            usart4: crate::usart::Usart::new_uart4(clocks),
         }
     }
-    // pub fn new(clocks: &'a crate::clocks::Clocks<'a, ChipSpecs>) -> Self {
-    //     Self {
-    //         clocks,
-    //         gpio_ports: crate::gpio::GpioPorts::new(clocks),
-    //         tim2: crate::tim2::Tim2::new(clocks),
-    //         usart1: crate::usart::Usart::new_usart1(clocks),
-    //         usart2: crate::usart::Usart::new_usart2(clocks),
-    //     }
-    // }
 
     // Setup any circular dependencies and register deferred calls
     pub fn setup_circular_deps(&'static self) {
-        // self.clocks.set_flash(&self.flash);
-        // self.gpio_ports.setup_circular_deps();
-
-        // Note: Boards with a CAN bus present also need to register its
-        // deferred call.
-        // kernel::deferred_call::DeferredCallClient::register(&self.usart1);
-        // kernel::deferred_call::DeferredCallClient::register(&self.usart2);
+        self.gpio_ports.setup_circular_deps();
+        kernel::deferred_call::DeferredCallClient::register(&self.usart4);
     }
 }
 
-impl<ChipSpecs: ChipSpecsTrait> InterruptService for Stm32mp157xDefaultPeripherals<ChipSpecs> {
+impl<'a, ChipSpecs: ChipSpecsTrait> InterruptService
+    for Stm32mp157xDefaultPeripherals<'a, ChipSpecs>
+{
     unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
         match interrupt {
             //            nvic::USART1 => self.usart1.handle_interrupt(),

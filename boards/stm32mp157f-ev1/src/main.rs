@@ -36,7 +36,7 @@ pub mod io;
 ///This platform's chip type:
 pub type ChipHw = stm32mp157f::chip::Stm32mp157x<
     'static,
-    stm32mp157f::interrupt_service::Stm32mp157fDefaultPeripherals,
+    stm32mp157f::interrupt_service::Stm32mp157fDefaultPeripherals<'static>,
 >;
 
 // Number of concurrent processes this platform supports.
@@ -84,7 +84,7 @@ impl
     KernelResources<
         stm32mp157f::chip::Stm32mp157x<
             'static,
-            stm32mp157f::interrupt_service::Stm32mp157fDefaultPeripherals,
+            stm32mp157f::interrupt_service::Stm32mp157fDefaultPeripherals<'static>,
         >,
     > for Stm32mp157fev1
 {
@@ -137,28 +137,16 @@ unsafe fn setup_peripherals(tim2: &stm32wle5jc::tim2::Tim2, subghz_spi: &stm32wl
 /// removed when this function returns. Otherwise, the stack space used for
 /// these static_inits is wasted.
 #[inline(never)]
-unsafe fn create_peripherals() -> &'static mut Stm32mp157fDefaultPeripherals {
-    // We use the default MSI 4Mhz clock
-    // let rcc = static_init!(stm32mp157f::rcc::Rcc, stm32mp157f::rcc::Rcc::new());
-
-    // let clocks = static_init!(
-    //     stm32mp157f::clocks::Clocks<Stm32mp157fSpecs>,
-    //     stm32mp157f::clocks::Clocks::new(rcc)
-    // );
-
-    // let syscfg = static_init!(
-    //     stm32wle5jc::syscfg::Syscfg,
-    //     stm32wle5jc::syscfg::Syscfg::new()
-    // );
-
-    // let exti = static_init!(
-    //     stm32wle5jc::exti::Exti,
-    //     stm32wle5jc::exti::Exti::new(syscfg)
-    // );
+unsafe fn create_peripherals() -> &'static mut Stm32mp157fDefaultPeripherals<'static> {
+    let rcc = static_init!(stm32mp157f::rcc::Rcc, stm32mp157f::rcc::Rcc::new());
+    let clocks = static_init!(
+        stm32mp157f::clocks::Clocks<Stm32mp157fSpecs>,
+        stm32mp157f::clocks::Clocks::new(rcc)
+    );
 
     let peripherals = static_init!(
         Stm32mp157fDefaultPeripherals,
-        Stm32mp157fDefaultPeripherals::new()
+        Stm32mp157fDefaultPeripherals::new(clocks)
     );
 
     peripherals
@@ -208,24 +196,29 @@ pub unsafe fn main() {
     //--------------------------------------------------------------------
     // Usart
     //--------------------------------------------------------------------
-    // base_peripherals.usart1.enable_clock();
-    // // base_peripherals.usart2.enable_clock();
+    base_peripherals.usart4.enable_clock();
 
-    // // USART1: PB6=TX , PB7=RX
-    // gpio_ports.get_pin(PinId::PB06).map(|pin| {
-    //     pin.set_mode(stm32wle5jc::gpio::Mode::AlternateFunctionMode);
-    //     pin.set_alternate_function(stm32wle5jc::gpio::AlternateFunction::AF7);
-    // });
+    // EV1 ST-LINK VCP is routed from UART4:
+    // TX=PG11 (AF6), RX=PB2 (AF8)
+    base_peripherals
+        .gpio_ports
+        .get_pin(stm32mp157f::gpio::PinId::PG11)
+        .map(|pin| {
+            pin.set_mode(stm32mp157f::gpio::Mode::AlternateFunctionMode);
+            pin.set_alternate_function(stm32mp157f::gpio::AlternateFunction::AF6);
+        });
+    base_peripherals
+        .gpio_ports
+        .get_pin(stm32mp157f::gpio::PinId::PB02)
+        .map(|pin| {
+            pin.set_mode(stm32mp157f::gpio::Mode::AlternateFunctionMode);
+            pin.set_alternate_function(stm32mp157f::gpio::AlternateFunction::AF8);
+        });
 
-    // gpio_ports.get_pin(PinId::PB07).map(|pin| {
-    //     pin.set_mode(stm32wle5jc::gpio::Mode::AlternateFunctionMode);
-    //     pin.set_alternate_function(stm32wle5jc::gpio::AlternateFunction::AF7);
-    // });
+    let uart_mux = components::console::UartMuxComponent::new(&base_peripherals.usart4, 115200)
+        .finalize(components::uart_mux_component_static!());
 
-    // let uart_mux = components::console::UartMuxComponent::new(&base_peripherals.usart1, 115200)
-    //     .finalize(components::uart_mux_component_static!());
-
-    // (*addr_of_mut!(io::WRITER)).set_initialized();
+    (*addr_of_mut!(io::WRITER)).set_initialized();
 
     //--------------------------------------------------------------------
     // Alarm
@@ -252,14 +245,14 @@ pub unsafe fn main() {
     // )
     // .finalize(components::console_component_static!());
 
-    // // Create the debugger object that handles calls to `debug!()`.
-    // components::debug_writer::DebugWriterComponent::new::<
-    //     <ChipHw as kernel::platform::chip::Chip>::ThreadIdProvider,
-    // >(
-    //     uart_mux,
-    //     create_capability!(capabilities::SetDebugWriterCapability),
-    // )
-    // .finalize(components::debug_writer_component_static!());
+    // Create the debugger object that handles calls to `debug!()`.
+    components::debug_writer::DebugWriterComponent::new::<
+        <ChipHw as kernel::platform::chip::Chip>::ThreadIdProvider,
+    >(
+        uart_mux,
+        create_capability!(capabilities::SetDebugWriterCapability),
+    )
+    .finalize(components::debug_writer_component_static!());
 
     //let process_printer = components::process_printer::ProcessPrinterTextComponent::new()
     //    .finalize(components::process_printer_text_component_static!());
@@ -293,7 +286,7 @@ pub unsafe fn main() {
         scheduler: static_init!(SchedulerInUse, SchedulerInUse::new()),
     };
 
-    // debug!("Initialization complete. Entering main loop...");
+    debug!("Initialization complete. Entering main loop...");
     // These symbols are defined in the linker script.
     extern "C" {
         /// Beginning of the ROM region containing app images.

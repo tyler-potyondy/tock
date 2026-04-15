@@ -111,7 +111,7 @@ use crate::clocks::hsi::HSI_FREQUENCY_MHZ;
 use crate::rcc::Rcc;
 use crate::rcc::SysClockSource;
 use crate::rcc::{PllSource, PLLM, PLLP, PLLQ};
-use crate::rcc::{DEFAULT_PLLM_VALUE, DEFAULT_PLLN_VALUE, DEFAULT_PLLP_VALUE, DEFAULT_PLLQ_VALUE};
+// use crate::rcc::{DEFAULT_PLLM_VALUE, DEFAULT_PLLN_VALUE, DEFAULT_PLLP_VALUE, DEFAULT_PLLQ_VALUE};
 
 use kernel::debug;
 use kernel::utilities::cells::OptionalCell;
@@ -143,21 +143,19 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
     //
     // An instance of the PLL clock.
     pub(in crate::clocks) fn new(rcc: &'a Rcc) -> Self {
-        const PLLP: usize = match DEFAULT_PLLP_VALUE {
-            PLLP::DivideBy2 => 2,
-            PLLP::DivideBy4 => 4,
-            PLLP::DivideBy6 => 6,
-            PLLP::DivideBy8 => 8,
-        };
-        const PLLM: usize = DEFAULT_PLLM_VALUE as usize;
-        const PLLQ: usize = DEFAULT_PLLQ_VALUE as usize;
+        // const PLLP: usize = match DEFAULT_PLLP_VALUE {
+        //     PLLP::DivideBy2 => 2,
+        //     PLLP::DivideBy4 => 4,
+        //     PLLP::DivideBy6 => 6,
+        //     PLLP::DivideBy8 => 8,
+        // };
+        // const PLLM: usize = DEFAULT_PLLM_VALUE as usize;
+        // const PLLQ: usize = DEFAULT_PLLQ_VALUE as usize;
         Self {
             rcc,
-            frequency_mhz: OptionalCell::new(HSI_FREQUENCY_MHZ / PLLM * DEFAULT_PLLN_VALUE / PLLP),
-            pll48_frequency_mhz: OptionalCell::new(
-                HSI_FREQUENCY_MHZ / PLLM * DEFAULT_PLLN_VALUE / PLLQ,
-            ),
-            pll48_calibrated: Cell::new(true),
+            frequency_mhz: OptionalCell::empty(),
+            pll48_frequency_mhz: OptionalCell::empty(),
+            pll48_calibrated: Cell::new(false),
             _marker: PhantomData,
         }
     }
@@ -183,8 +181,11 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
         pll_source_clock_freq: usize,
         pllp: PLLP,
     ) -> usize {
+        unimplemented!();
+        /*
         let vco_input_frequency: usize = pll_source_clock_freq / DEFAULT_PLLM_VALUE as usize;
         desired_frequency_mhz * Into::<usize>::into(pllp) / vco_input_frequency
+        */
     }
 
     // The caller must ensure the VCO output frequency lies between 100 and 432MHz. Otherwise, the
@@ -342,6 +343,8 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
         self.rcc.set_pll_clock_n_multiplier(plln);
 
         // Compute PLLQ
+        unimplemented!();
+        /*
         let vco_output_frequency = source_frequency / DEFAULT_PLLM_VALUE as usize * plln;
         let pllq = Self::compute_pllq(vco_output_frequency);
         self.rcc.set_pll_clock_q_divider(pllq);
@@ -356,6 +359,7 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
         self.pll48_frequency_mhz.set(pll48_frequency);
 
         Ok(())
+        */
     }
 
     /// Get the frequency in MHz of the PLL clock.
@@ -420,6 +424,7 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
     }
 }
 
+/*
 /// Tests for the PLL clock
 ///
 /// This module ensures that the PLL clock works as expected. If changes are brought to the PLL
@@ -462,16 +467,18 @@ impl<'a, PllConstants: clock_constants::PllConstants> Pll<'a, PllConstants> {
 /// If there are any errors, open an issue ticket at <https://github.com/tock/tock>. Please provide the
 /// output of the test execution.
 pub mod tests {
-    use super::{
-        clock_constants, debug, ErrorCode, Pll, PllSource, DEFAULT_PLLM_VALUE, HSI_FREQUENCY_MHZ,
-        PLLM, PLLP, PLLQ,
-    };
+    // use super::{
+    //     clock_constants, debug, ErrorCode, Pll, PllSource, DEFAULT_PLLM_VALUE, HSI_FREQUENCY_MHZ,
+    //     PLLM, PLLP, PLLQ,
+    // };
 
     // Depending on the default PLLM value, the computed PLLN value changes.
+    /*
     const MULTIPLIER: usize = match DEFAULT_PLLM_VALUE {
         PLLM::DivideBy8 => 1,
         PLLM::DivideBy16 => 2,
     };
+    */
 
     /// Test if the configuration parameters are correctly computed for a given frequency.
     ///
@@ -483,6 +490,8 @@ pub mod tests {
     /// pll::test::test_pll_config(&peripherals.stm32f4.pll); // Run the tests
     /// ```
     pub fn test_pll_config<PllConstants: clock_constants::PllConstants>() {
+        unimplemented!();
+        /*
         debug!("Testing PLL configuration...");
 
         // 13 or 24MHz --> minimum value
@@ -611,8 +620,8 @@ pub mod tests {
         vco_output_frequency_mhz = HSI_FREQUENCY_MHZ / DEFAULT_PLLM_VALUE as usize * plln;
         pllq = Pll::<PllConstants>::compute_pllq(vco_output_frequency_mhz);
         assert_eq!(PLLQ::DivideBy9, pllq);
-
-        debug!("Finished testing PLL configuration.");
+        */
+        // debug!("Finished testing PLL configuration.");
     }
 
     /// Check if the PLL works as expected.
@@ -630,6 +639,8 @@ pub mod tests {
     pub fn test_pll_struct<'a, PllConstants: clock_constants::PllConstants>(
         pll: &'a Pll<'a, PllConstants>,
     ) {
+        unimplemented!();
+        /*
         debug!("Testing PLL struct...");
         // Make sure the PLL clock is disabled
         assert_eq!(Ok(()), pll.disable());
@@ -735,8 +746,8 @@ pub mod tests {
         // Turn off the PLL clock
         assert_eq!(Ok(()), pll.disable());
         assert!(!pll.is_enabled());
-
-        debug!("Finished testing PLL struct.");
+        */
+        // debug!("Finished testing PLL struct.");
     }
 
     /// Run the entire test suite.
@@ -748,7 +759,10 @@ pub mod tests {
     /// /* Code goes here */
     /// pll::test::run(&peripherals.stm32f4.pll); // Run the tests
     /// ```
+
     pub fn run<'a, PllConstants: clock_constants::PllConstants>(pll: &'a Pll<'a, PllConstants>) {
+        unimplemented!();
+        /*
         debug!("");
         debug!("===============================================");
         debug!("Testing PLL...");
@@ -757,8 +771,10 @@ pub mod tests {
         debug!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         test_pll_struct(pll);
         debug!("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-        debug!("Finished testing PLL. Everything is alright!");
-        debug!("===============================================");
-        debug!("");
+        // debug!("Finished testing PLL. Everything is alright!");
+        // debug!("===============================================");
+        // debug!("");
+        */
     }
 }
+*/

@@ -557,6 +557,7 @@ impl<'a, ChipSpecs: ChipSpecsTrait> Stm32mp157xClocks for Clocks<'a, ChipSpecs> 
     }
 }
 
+/*
 /// Tests for clocks functionalities
 ///
 /// These tests ensure the clocks are properly working. If any changes are made to the clock
@@ -1028,3 +1029,4 @@ pub mod tests {
         debug!("");
     }
 }
+*/

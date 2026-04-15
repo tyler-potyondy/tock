@@ -62,20 +62,26 @@ load
 # Set VTOR (Vector Table Offset Register) to our vector table in SRAM.
 monitor mww 0xE000ED08 0x10000000
 
+# GDB picks an expression language from the loaded debug info (often Rust for a
+# Tock ELF). A small kernel / linker change can move the "current" context so
+# C-only spellings (e.g. `unsigned int`) suddenly fail with "No symbol …" even
+# though the GDB binary never changed. Force C for these raw-memory reads only.
+set language c
+
 # Read MSP and PC from the loaded vector table in SRAM.
 # Now that we're on the CM4 GDB port, GDB memory access works.
-# Use C-style casts; `{unsigned int}addr` breaks some GDB builds ("unexpected token").
-set $msp = *(unsigned int *)0x10000000
-set $pc = *(unsigned int *)0x10000004
+# `int *` avoids `unsigned` entirely for GDBs that still mis-parse in edge cases.
+set $msp = *(int *)0x10000000
+set $pc = *(int *)0x10000004
 
 # Verify with explicit reads
 printf "=== Vector table at 0x10000000 ===\n"
-printf "  Word 0 (MSP):   0x%08x\n", *(unsigned int *)0x10000000
-printf "  Word 1 (Reset):  0x%08x\n", *(unsigned int *)0x10000004
-printf "  Word 2 (NMI):    0x%08x\n", *(unsigned int *)0x10000008
-printf "  Word 3 (HardF):  0x%08x\n", *(unsigned int *)0x1000000C
+printf "  Word 0 (MSP):   0x%08x\n", *(int *)0x10000000
+printf "  Word 1 (Reset):  0x%08x\n", *(int *)0x10000004
+printf "  Word 2 (NMI):    0x%08x\n", *(int *)0x10000008
+printf "  Word 3 (HardF):  0x%08x\n", *(int *)0x1000000C
 printf "=== Registers after setup ===\n"
-printf "  VTOR  = 0x%08x\n", *(unsigned int *)0xE000ED08
+printf "  VTOR  = 0x%08x\n", *(int *)0xE000ED08
 printf "  MSP   = 0x%08x\n", $msp
 printf "  PC    = 0x%08x\n", $pc
 printf "=== Linker symbols ===\n"
@@ -87,9 +93,11 @@ printf "  _etext      = 0x%08x\n", &_etext
 printf "  _sstack     = 0x%08x\n", &_sstack
 printf "  _estack     = 0x%08x\n", &_estack
 printf "=== Fault status (CFSR) ===\n"
-printf "  CFSR  = 0x%08x\n", *(unsigned int *)0xE000ED28
-printf "  HFSR  = 0x%08x\n", *(unsigned int *)0xE000ED2C
+printf "  CFSR  = 0x%08x\n", *(int *)0xE000ED28
+printf "  HFSR  = 0x%08x\n", *(int *)0xE000ED2C
 printf "================================\n"
+
+set language auto
 
 # Do not `break initialize_ram_jump_to_main`: GDB often places that breakpoint
 # on the first `cmp` inside the naked BSS-clear loop (e.g. 0x1000013e), so every

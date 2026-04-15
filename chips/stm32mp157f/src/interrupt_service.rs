@@ -5,14 +5,14 @@
 use crate::chip_specs::Stm32mp157fSpecs;
 use stm32mp157x::chip::Stm32mp157xDefaultPeripherals;
 
-pub struct Stm32mp157fDefaultPeripherals {
-    pub stm32mp157x: Stm32mp157xDefaultPeripherals<Stm32mp157fSpecs>,
+pub struct Stm32mp157fDefaultPeripherals<'a> {
+    pub stm32mp157x: Stm32mp157xDefaultPeripherals<'a, Stm32mp157fSpecs>,
 }
 
-impl Stm32mp157fDefaultPeripherals {
-    pub unsafe fn new() -> Self {
+impl<'a> Stm32mp157fDefaultPeripherals<'a> {
+    pub unsafe fn new(clocks: &'a crate::clocks::Clocks<'a, Stm32mp157fSpecs>) -> Self {
         Self {
-            stm32mp157x: Stm32mp157xDefaultPeripherals::new(),
+            stm32mp157x: Stm32mp157xDefaultPeripherals::new(clocks),
         }
     }
     // Necessary for setting up circular dependencies & registering deferred
@@ -21,7 +21,7 @@ impl Stm32mp157fDefaultPeripherals {
         self.stm32mp157x.setup_circular_deps();
     }
 }
-impl kernel::platform::chip::InterruptService for Stm32mp157fDefaultPeripherals {
+impl<'a> kernel::platform::chip::InterruptService for Stm32mp157fDefaultPeripherals<'a> {
     unsafe fn service_interrupt(&self, interrupt: u32) -> bool {
         #[allow(clippy::match_single_binding)]
         match interrupt {

@@ -314,6 +314,8 @@ const USART1_BASE: StaticRef<UsartRegisters> =
     unsafe { StaticRef::new(0x40013800 as *const UsartRegisters) };
 const USART2_BASE: StaticRef<UsartRegisters> =
     unsafe { StaticRef::new(0x40004400 as *const UsartRegisters) };
+const UART4_BASE: StaticRef<UsartRegisters> =
+    unsafe { StaticRef::new(0x40010000 as *const UsartRegisters) };
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, PartialEq)]
@@ -389,6 +391,16 @@ impl<'a> Usart<'a> {
             USART2_BASE,
             UsartClock(phclk::PeripheralClock::new(
                 phclk::PeripheralClockType::APB1(phclk::PCLK1::USART2),
+                rcc,
+            )),
+        )
+    }
+
+    pub fn new_uart4(rcc: &'a dyn Stm32mp157xClocks) -> Self {
+        Self::new(
+            UART4_BASE,
+            UsartClock(phclk::PeripheralClock::new(
+                phclk::PeripheralClockType::APB1(phclk::PCLK1::UART4),
                 rcc,
             )),
         )
@@ -613,12 +625,9 @@ impl hil::uart::Configure for Usart<'_> {
         // Set no parity
         self.registers.cr1.modify(CR1::PCE::CLEAR);
 
-        // Set the baud rate. By default OVER8 is 0 (oversampling by 16) and
-        // PCLK1 is at 4Mhz. The desired baud rate is 115.2KBps. So according
-        // to Table 159 of reference manual, the value for BRR is 138.8888 (0x8A)
-        // DIV_Fraction = 0x5
-        // DIV_Mantissa = 0x4
-        self.registers.brr.modify(BRR::BRR.val(0x22_u32));
+        // Set baud rate for 115200 assuming 64MHz UART kernel/peripheral clock:
+        // BRR ~= 64_000_000 / 115_200 = 555.6 => 0x22B.
+        self.registers.brr.modify(BRR::BRR.val(0x22B_u32));
 
         // Enable transmit block
         self.registers.cr1.modify(CR1::TE::SET);
